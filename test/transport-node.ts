@@ -8,21 +8,23 @@ export class NodeTransport {
   private closeCb: (() => void) | null = null;
 
   connect(host: string, port: number): Promise<void> {
+    this.generation += 1;
     const gen = this.generation;
+    const socket = net.connect({ host, port });
+    this.socket = socket;
     return new Promise((resolve, reject) => {
-      const socket = net.connect({ host, port }, () => resolve());
-      this.socket = socket;
+      socket.once('connect', () => resolve());
+      socket.once('error', (e: Error) => { if (gen === this.generation) reject(e); });
       socket.on('data', (chunk: Buffer) => {
-        if (gen !== this.generation) return;
+        if (gen !== this.generation || this.socket !== socket) return;
         if (this.dataCb) this.dataCb(chunk);
       });
       socket.on('close', () => {
-        if (gen !== this.generation) return;
+        if (gen !== this.generation || this.socket !== socket) return;
         if (this.closeCb) this.closeCb();
       });
       socket.on('error', () => {
-        if (gen !== this.generation) return;
-        if (this.closeCb) this.closeCb();
+        if (gen !== this.generation || this.socket !== socket) return;
       });
     });
   }
