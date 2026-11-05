@@ -1,8 +1,8 @@
 {
-  "name": "horizon-mobile-protocol",
+  "name": "horizon-mobile",
   "version": "0.1.0",
   "private": true,
-  "description": "HorizonMobile App 平面协议核心（契约 1.2.0）：帧编解码、HMAC 鉴权、多路复用连接；RN 集成时注入 react-native-tcp-socket 传输",
+  "description": "HorizonMobile：深空矩阵新视野的 Android App（AEMobileApp 底座迁移）",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc",
