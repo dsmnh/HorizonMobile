@@ -22,7 +22,12 @@ export class NodeTransport {
   }
 
   write(data: Buffer): void {
-    if (this.socket) this.socket.write(data);
+    if (this.socket) {
+      console.error('[xport] w' + (data[4] ?? -1).toString(16));
+      this.socket.write(data);
+    } else {
+      console.error('[xport] w-closed');
+    }
   }
 
   onData(cb: (chunk: Buffer) => void): void {

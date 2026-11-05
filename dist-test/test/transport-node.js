@@ -31,11 +31,11 @@ class NodeTransport {
     }
     write(data) {
         if (this.socket) {
-            console.error('[xport] write type=0x' + (data[4] ?? -1).toString(16) + ' len=' + data.length);
+            console.error('[xport] w' + (data[4] ?? -1).toString(16));
             this.socket.write(data);
         }
         else {
-            console.error('[xport] write on closed socket');
+            console.error('[xport] w-closed');
         }
     }
     onData(cb) {
