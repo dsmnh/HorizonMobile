@@ -30,14 +30,22 @@ class NodeTransport {
         });
     }
     write(data) {
-        if (this.socket)
+        if (this.socket) {
+            console.error('[xport] write type=0x' + (data[4] ?? -1).toString(16) + ' len=' + data.length);
             this.socket.write(data);
+        }
+        else {
+            console.error('[xport] write on closed socket');
+        }
     }
     onData(cb) {
         this.dataCb = cb;
     }
     onClose(cb) {
-        this.closeCb = cb;
+        this.closeCb = () => {
+            console.error('[xport] closed');
+            cb();
+        };
     }
     close() {
         if (this.socket)
