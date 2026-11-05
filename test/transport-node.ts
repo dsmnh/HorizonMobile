@@ -3,19 +3,25 @@ import net from 'node:net';
 
 export class NodeTransport {
   private socket: net.Socket | null = null;
+  private generation = 0;
   private dataCb: ((chunk: Buffer) => void) | null = null;
   private closeCb: (() => void) | null = null;
 
   connect(host: string, port: number): Promise<void> {
+    const gen = this.generation;
     return new Promise((resolve, reject) => {
-      this.socket = net.connect({ host, port }, () => resolve());
-      this.socket.on('data', (chunk: Buffer) => {
+      const socket = net.connect({ host, port }, () => resolve());
+      this.socket = socket;
+      socket.on('data', (chunk: Buffer) => {
+        if (gen !== this.generation) return;
         if (this.dataCb) this.dataCb(chunk);
       });
-      this.socket.on('close', () => {
+      socket.on('close', () => {
+        if (gen !== this.generation) return;
         if (this.closeCb) this.closeCb();
       });
-      this.socket.on('error', () => {
+      socket.on('error', () => {
+        if (gen !== this.generation) return;
         if (this.closeCb) this.closeCb();
       });
     });
@@ -39,6 +45,7 @@ export class NodeTransport {
   }
 
   close(): void {
+    this.generation += 1;
     if (this.socket) this.socket.destroy();
     this.socket = null;
   }

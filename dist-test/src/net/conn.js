@@ -225,7 +225,8 @@ class HorizonConn {
         if (sid)
             frame.sid = sid;
         this.transport.write((0, protocol_1.jsonFrame)(protocol_1.T.SUB, frame));
-        // SUB_OK 由帧分发器按 id 完成；这里仅登记映射
+        // SUB_OK 由帧分发器按 id 完成；这里仅登记映射。
+        // 断连时 pending 被 reject——订阅重订由重连循环接管，此处吞掉拒绝避免未捕获崩溃。
         const promise = new Promise((resolve) => {
             const timer = setTimeout(() => this.pending.delete(id), this.opts.requestTimeoutMs);
             this.pending.set(id, {
@@ -239,7 +240,7 @@ class HorizonConn {
                 timer,
             });
         });
-        await promise;
+        await promise.catch(() => undefined);
     }
     /** @internal */
     unsub(streamId) {

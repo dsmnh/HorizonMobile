@@ -39,7 +39,9 @@ export class MockAppBackend {
     let streamId = 0;
     this.subscribed += 0;
 
-    const write = (frame) => socket.write(frame);
+    const write = (frame) => {
+      if (!socket.destroyed && socket.writable) socket.write(frame);
+    };
 
     socket.on('data', (chunk) => {
       buffer = Buffer.concat([buffer, chunk]);
@@ -51,7 +53,12 @@ export class MockAppBackend {
         buffer = buffer.subarray(4 + 2 + len);
         const type = raw[0];
         const payload = raw.subarray(2);
-        const body = payload.length ? JSON.parse(payload.toString('utf8')) : {};
+        let body = {};
+        try {
+          body = payload.length ? JSON.parse(payload.toString('utf8')) : {};
+        } catch (e) {
+          return; // 截断/损坏帧（连接关闭时的残留），丢弃
+        }
 
         if (type === 0x01) {
           // HELLO

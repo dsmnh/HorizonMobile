@@ -9,21 +9,30 @@ const node_net_1 = __importDefault(require("node:net"));
 class NodeTransport {
     constructor() {
         this.socket = null;
+        this.generation = 0;
         this.dataCb = null;
         this.closeCb = null;
     }
     connect(host, port) {
+        const gen = this.generation;
         return new Promise((resolve, reject) => {
-            this.socket = node_net_1.default.connect({ host, port }, () => resolve());
-            this.socket.on('data', (chunk) => {
+            const socket = node_net_1.default.connect({ host, port }, () => resolve());
+            this.socket = socket;
+            socket.on('data', (chunk) => {
+                if (gen !== this.generation)
+                    return;
                 if (this.dataCb)
                     this.dataCb(chunk);
             });
-            this.socket.on('close', () => {
+            socket.on('close', () => {
+                if (gen !== this.generation)
+                    return;
                 if (this.closeCb)
                     this.closeCb();
             });
-            this.socket.on('error', () => {
+            socket.on('error', () => {
+                if (gen !== this.generation)
+                    return;
                 if (this.closeCb)
                     this.closeCb();
             });
@@ -42,12 +51,10 @@ class NodeTransport {
         this.dataCb = cb;
     }
     onClose(cb) {
-        this.closeCb = () => {
-            console.error('[xport] closed');
-            cb();
-        };
+        this.closeCb = cb;
     }
     close() {
+        this.generation += 1;
         if (this.socket)
             this.socket.destroy();
         this.socket = null;

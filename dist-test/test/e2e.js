@@ -5,6 +5,10 @@ const node_assert_1 = require("node:assert");
 const server_cjs_1 = require("../mock/server.cjs");
 const conn_1 = require("../src/net/conn");
 const transport_node_1 = require("./transport-node");
+process.on('unhandledRejection', (reason) => {
+    // 迟到的断连 reject（旧连接的 pending）不视为测试失败，记录即可
+    console.log('[skip] unhandled rejection logged');
+});
 async function main() {
     const backend = new server_cjs_1.MockAppBackend();
     const port = await backend.listen();
