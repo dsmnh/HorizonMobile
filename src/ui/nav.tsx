@@ -46,6 +46,7 @@ export type RootStackParamList = {
   Monitor: undefined;
   Session: undefined;
   Me: undefined;
+  Settings: undefined;
 };
 
 export type RootStackProps<T extends keyof RootStackParamList = keyof RootStackParamList> =

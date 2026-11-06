@@ -13,6 +13,7 @@ import { TeamRosterScreen } from './TeamRosterScreen';
 import { ChatScreen } from './ChatScreen';
 import { MonitorScreen } from './MonitorScreen';
 import { MeScreen } from './MeScreen';
+import { SettingsScreen } from './SettingsScreen';
 import { SessionScreen } from './SessionScreen';
 import { BindScreen } from './BindScreen';
 import { AboutScreen } from './AboutScreen';
@@ -53,6 +54,7 @@ export function HomeRoute({ navigation }: RootStackProps<'Home'>): JSX.Element {
     { label: '监控', route: 'Monitor' },
     { label: '会话', route: 'Session' },
     { label: 'ME 设备', route: 'Me' },
+    { label: '设置', route: 'Settings' },
   ];
 
   return (
@@ -162,6 +164,17 @@ export function MeRoute(): JSX.Element {
         ) : (
           <Text style={styles.empty}>未绑定身份：先在主界面完成绑定。</Text>
         )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+export function SettingsRoute(): JSX.Element {
+  return (
+    <SafeAreaView style={styles.root}>
+      <ScrollView contentContainerStyle={styles.body}>
+        <SettingsScreen />
+        <AboutScreen />
       </ScrollView>
     </SafeAreaView>
   );

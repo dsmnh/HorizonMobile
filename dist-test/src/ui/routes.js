@@ -39,6 +39,7 @@ exports.TeamRoute = TeamRoute;
 exports.ChatRoute = ChatRoute;
 exports.MonitorRoute = MonitorRoute;
 exports.MeRoute = MeRoute;
+exports.SettingsRoute = SettingsRoute;
 exports.SessionRoute = SessionRoute;
 /**
  * 路由包装层：从 AppContext 取值下传给既有屏幕组件（屏幕保持 props 无感）。
@@ -55,6 +56,7 @@ const TeamRosterScreen_1 = require("./TeamRosterScreen");
 const ChatScreen_1 = require("./ChatScreen");
 const MonitorScreen_1 = require("./MonitorScreen");
 const MeScreen_1 = require("./MeScreen");
+const SettingsScreen_1 = require("./SettingsScreen");
 const SessionScreen_1 = require("./SessionScreen");
 const BindScreen_1 = require("./BindScreen");
 const AboutScreen_1 = require("./AboutScreen");
@@ -88,6 +90,7 @@ function HomeRoute({ navigation }) {
         { label: '监控', route: 'Monitor' },
         { label: '会话', route: 'Session' },
         { label: 'ME 设备', route: 'Me' },
+        { label: '设置', route: 'Settings' },
     ];
     return (<react_native_1.SafeAreaView style={styles.root}>
       <react_native_1.ScrollView contentContainerStyle={styles.body}>
@@ -157,6 +160,14 @@ function MeRoute() {
     return (<react_native_1.SafeAreaView style={styles.root}>
       <react_native_1.ScrollView contentContainerStyle={styles.body}>
         {conn != null && activeUuid != null ? (<MeScreen_1.MeScreen conn={conn} uuid={activeUuid}/>) : (<react_native_1.Text style={styles.empty}>未绑定身份：先在主界面完成绑定。</react_native_1.Text>)}
+      </react_native_1.ScrollView>
+    </react_native_1.SafeAreaView>);
+}
+function SettingsRoute() {
+    return (<react_native_1.SafeAreaView style={styles.root}>
+      <react_native_1.ScrollView contentContainerStyle={styles.body}>
+        <SettingsScreen_1.SettingsScreen />
+        <AboutScreen_1.AboutScreen />
       </react_native_1.ScrollView>
     </react_native_1.SafeAreaView>);
 }
