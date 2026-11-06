@@ -365,8 +365,9 @@ export class HorizonConn {
         return;
       }
       if (this.buffer.length < 4 + len) return;
-      const raw = this.buffer.subarray(4, 4 + 2 + len);
-      this.buffer = this.buffer.subarray(4 + 2 + len);
+      // len 已含 type+flags 两字节：raw = [4, 4+len)，残留从 4+len 起——多切 2 字节会吞掉同 chunk 下一帧
+      const raw = this.buffer.subarray(4, 4 + len);
+      this.buffer = this.buffer.subarray(4 + len);
       const frame: Frame = { type: raw[0], flags: raw[1], payload: raw.subarray(2) };
       if (this.handshakeWaiter) {
         const deliver = this.handshakeWaiter;

@@ -6,7 +6,7 @@ import { NodeTransport } from './transport-node';
 
 process.on('unhandledRejection', (reason) => {
   // 迟到的断连 reject（旧连接的 pending）不视为测试失败，记录即可
-  console.log('[skip] unhandled rejection logged');
+  console.log('[skip] unhandled rejection logged:', String(reason).split('\n')[0]);
 });
 
 /** 全局看门狗：任一场景卡死立即退出并给出定位，杜绝无限等待。 */
@@ -87,6 +87,34 @@ async function main(): Promise<void> {
     await conn.start();
     const res = await conn.req('no.such.op');
     step('未知 op 错误传播', !res.ok && res.m === 'UNKNOWN_OP', res.m ?? '');
+    conn.close();
+  }
+
+  // 6) chat 流：订阅、定向投递、UNSUB 停投
+  {
+    const conn = new HorizonConn(new NodeTransport(), { host: '127.0.0.1', port, token: backend.token });
+    await conn.start();
+    const chatA = conn.subscribeStream('chat', { uuid: 'uuid-a' });
+    const chatB = conn.subscribeStream('chat', { uuid: 'uuid-b' });
+    await waitFor(() => chatA.streamId >= 0 && chatB.streamId >= 0, 2000);
+
+    let gotA: any = null;
+    let gotB: any = null;
+    chatA.addEventListener((e) => { gotA = e; });
+    chatB.addEventListener((e) => { gotB = e; });
+    backend.pushChatEvent('uuid-a', { k: 'msg', mid: 7, from: 'uuid-x', text: 'hi' });
+    await waitFor(() => gotA !== null, 2000);
+    const directedOk = gotA?.k === 'msg' && gotB === null;
+    step('chat 流事件定向送达（uuid-a 收到，uuid-b 不串流）', directedOk, `A=${JSON.stringify(gotA)} B=${gotB}`);
+
+    chatA.close();
+    await sleep(100);
+    backend.pushChatEvent('uuid-b', { k: 'msg', mid: 8, from: 'uuid-y', text: 'yo' });
+    await waitFor(() => gotB !== null, 2000);
+    // chatA 已 UNSUB：mock 登记移除，A 不得再收到任何推送
+    const aCount = backend.chatStreamCount('uuid-a');
+    step('UNSUB 后停止投递', aCount === 0 && gotB?.mid === 8, `chatA 登记=${aCount} B=${JSON.stringify(gotB)}`);
+    chatB.close();
     conn.close();
   }
 

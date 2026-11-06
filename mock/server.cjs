@@ -62,8 +62,9 @@ export class MockAppBackend {
         if (buffer.length < 4) return;
         const len = buffer.readUInt32BE(0);
         if (buffer.length < 4 + len) return;
-        const raw = buffer.subarray(4, 4 + 2 + len);
-        buffer = buffer.subarray(4 + 2 + len);
+        // len 已含 type+flags：raw = [4, 4+len)，残留从 4+len 起（同 chunk 多帧不丢）
+        const raw = buffer.subarray(4, 4 + len);
+        buffer = buffer.subarray(4 + len);
         const type = raw[0];
         const payload = raw.subarray(2);
         let body = {};
@@ -122,15 +123,20 @@ export class MockAppBackend {
           continue;
         }
         if (type === 0x20) {
-          // SUB（team 流）
+          // SUB（team/chat 流；1.0 mock 面向契约 1.2.0+1.4.0 的 App 平面订阅）
           streamId += 1;
           const sid = b64u(crypto.randomBytes(8));
           this.lastSubSid = sid;
           write(jsonFrame(0x21, { id: body.id, s: streamId, sid }));
-          this.activeStreams.push({ id: streamId, write, socket });
+          this.activeStreams.push({ id: streamId, op: body.op, uuid: (body.p ?? {}).uuid, write, socket });
           continue;
         }
-        if (type === 0x23) continue; // UNSUB
+        if (type === 0x23) {
+          // UNSUB：按流 ID 移除登记，后续推送不再送达
+          const sidNum = body.s;
+          this.activeStreams = this.activeStreams.filter((st) => st.id !== sidNum);
+          continue;
+        }
         if (type === 0x30) {
           write(encodeFrame(0x31));
           continue;
@@ -155,6 +161,23 @@ export class MockAppBackend {
     const stream = this.activeStreams[this.activeStreams.length - 1];
     if (!stream) throw new Error('mock：当前无活跃订阅');
     this.pushTeamEvent(stream.id, stream.write, event);
+  }
+
+  /** 向指定 uuid 的 chat 流订阅定向推送（契约 1.4.0：按 uuid 定向投递）。 */
+  pushChatEvent(uuid, event) {
+    const targets = this.activeStreams.filter((st) => st.op === 'chat' && st.uuid === uuid);
+    if (!targets.length) throw new Error(`mock：uuid=${uuid} 无活跃 chat 订阅`);
+    for (const st of targets) {
+      st.write(jsonFrame(0x22, {
+        s: st.id,
+        f: { t: 'd', boot: 1, seq: Date.now(), ts: Math.floor(Date.now() / 1000), uuid, events: [event] },
+      }));
+    }
+  }
+
+  /** 当前登记的 chat 流订阅数（按 uuid 过滤，-1 表示不过滤）。 */
+  chatStreamCount(uuid) {
+    return this.activeStreams.filter((st) => st.op === 'chat' && (uuid == null || st.uuid === uuid)).length;
   }
 
   /** 向当前（唯一）订阅推送一条 team 增量事件。 */
