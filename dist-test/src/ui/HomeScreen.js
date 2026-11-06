@@ -15,6 +15,7 @@ const ChatScreen_1 = require("./ChatScreen");
 const TeamOpsScreen_1 = require("./TeamOpsScreen");
 const BindScreen_1 = require("./BindScreen");
 const MonitorScreen_1 = require("./MonitorScreen");
+const SessionScreen_1 = require("./SessionScreen");
 function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, onUuidsChanged }) {
     return (<react_native_1.View style={styles.card}>
       <react_native_1.Text style={styles.brand}>Horizon</react_native_1.Text>
@@ -41,6 +42,7 @@ function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, onUuidsC
         </react_native_1.View>)}
 
       {conn != null && <MonitorScreen_1.MonitorScreen conn={conn}/>}
+      {conn != null && <SessionScreen_1.SessionScreen conn={conn} onSelfRevoked={onDisconnect}/>}
 
       <react_native_1.Pressable style={styles.btn} onPress={onDisconnect}>
         <react_native_1.Text style={styles.btnText}>断开连接</react_native_1.Text>

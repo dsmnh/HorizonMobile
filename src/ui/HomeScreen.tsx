@@ -10,6 +10,7 @@ import { ChatScreen } from './ChatScreen';
 import { TeamOpsScreen } from './TeamOpsScreen';
 import { BindScreen } from './BindScreen';
 import { MonitorScreen } from './MonitorScreen';
+import { SessionScreen } from './SessionScreen';
 
 export interface HomeScreenProps {
   host: string;
@@ -60,6 +61,7 @@ export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, o
       )}
 
       {conn != null && <MonitorScreen conn={conn} />}
+      {conn != null && <SessionScreen conn={conn} onSelfRevoked={onDisconnect} />}
 
       <Pressable style={styles.btn} onPress={onDisconnect}>
         <Text style={styles.btnText}>断开连接</Text>
