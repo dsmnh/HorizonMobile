@@ -41,6 +41,7 @@ exports.MonitorScreen = MonitorScreen;
  */
 const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
+const theme_1 = require("../ui/theme");
 function MonitorScreen({ conn }) {
     const [nodes, setNodes] = (0, react_1.useState)([]);
     const [error, setError] = (0, react_1.useState)('');
@@ -104,22 +105,22 @@ function MonitorScreen({ conn }) {
 const styles = react_native_1.StyleSheet.create({
     card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 18 },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    title: { color: '#E8EEF9', fontSize: 16, fontWeight: '600' },
-    toggleBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#2E6BE6' },
-    toggleText: { color: '#6E9BF0', fontSize: 12 },
-    error: { color: '#E46A6A', fontSize: 13, marginTop: 8 },
-    empty: { color: '#5A6B8C', fontSize: 13, marginTop: 10 },
+    title: { color: theme_1.colors.text, fontSize: 16, fontWeight: '600' },
+    toggleBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: theme_1.colors.primary },
+    toggleText: { color: theme_1.colors.primaryText, fontSize: 12 },
+    error: { color: theme_1.colors.danger, fontSize: 13, marginTop: 8 },
+    empty: { color: theme_1.colors.faint, fontSize: 13, marginTop: 10 },
     nodeCard: {
-        backgroundColor: '#16203A',
+        backgroundColor: theme_1.colors.card,
         borderRadius: 8,
         paddingVertical: 10,
         paddingHorizontal: 12,
         marginTop: 8,
     },
     nodeHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-    nodeName: { color: '#E8EEF9', fontSize: 15 },
-    online: { color: '#4CC38A', fontSize: 12 },
-    offline: { color: '#E4A24C', fontSize: 12 },
-    metrics: { color: '#8FA3C7', fontSize: 13, marginTop: 6 },
-    dim: { color: '#5A6B8C', fontSize: 11, marginTop: 3 },
+    nodeName: { color: theme_1.colors.text, fontSize: 15 },
+    online: { color: theme_1.colors.ok, fontSize: 12 },
+    offline: { color: theme_1.colors.warn, fontSize: 12 },
+    metrics: { color: theme_1.colors.muted, fontSize: 13, marginTop: 6 },
+    dim: { color: theme_1.colors.faint, fontSize: 11, marginTop: 3 },
 });

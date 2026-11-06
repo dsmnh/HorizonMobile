@@ -9,6 +9,7 @@ exports.AboutScreen = AboutScreen;
  */
 const react_1 = __importDefault(require("react"));
 const react_native_1 = require("react-native");
+const theme_1 = require("../ui/theme");
 function AboutScreen() {
     return (<react_native_1.View style={styles.card}>
       <react_native_1.Text style={styles.brand}>Horizon</react_native_1.Text>
@@ -21,7 +22,7 @@ function AboutScreen() {
 }
 const styles = react_native_1.StyleSheet.create({
     card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 18 },
-    brand: { color: '#E8EEF9', fontSize: 26, fontWeight: '700', letterSpacing: 2 },
-    sub: { color: '#5A6B8C', fontSize: 12, marginTop: 4, marginBottom: 14 },
-    line: { color: '#8FA3C7', fontSize: 12, marginTop: 6, lineHeight: 18 },
+    brand: { color: theme_1.colors.text, fontSize: 26, fontWeight: '700', letterSpacing: 2 },
+    sub: { color: theme_1.colors.faint, fontSize: 12, marginTop: 4, marginBottom: 14 },
+    line: { color: theme_1.colors.muted, fontSize: 12, marginTop: 6, lineHeight: 18 },
 });

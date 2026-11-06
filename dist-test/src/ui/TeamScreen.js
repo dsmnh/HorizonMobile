@@ -41,6 +41,7 @@ exports.TeamScreen = TeamScreen;
  */
 const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
+const theme_1 = require("../ui/theme");
 function TeamScreen({ conn, uuid }) {
     const [teams, setTeams] = (0, react_1.useState)([]);
     const [error, setError] = (0, react_1.useState)('');
@@ -105,14 +106,14 @@ function TeamScreen({ conn, uuid }) {
 const styles = react_native_1.StyleSheet.create({
     card: { width: '100%', maxWidth: 420, alignSelf: 'center' },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    title: { color: '#E8EEF9', fontSize: 22, fontWeight: '700' },
-    refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#2E6BE6' },
-    refreshText: { color: '#6E9BF0', fontSize: 12 },
-    event: { color: '#4CC38A', fontSize: 12, marginTop: 8 },
-    error: { color: '#E46A6A', fontSize: 13, marginTop: 10 },
-    empty: { color: '#5A6B8C', fontSize: 13, marginTop: 10 },
+    title: { color: theme_1.colors.text, fontSize: 22, fontWeight: '700' },
+    refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: theme_1.colors.primary },
+    refreshText: { color: theme_1.colors.primaryText, fontSize: 12 },
+    event: { color: theme_1.colors.ok, fontSize: 12, marginTop: 8 },
+    error: { color: theme_1.colors.danger, fontSize: 13, marginTop: 10 },
+    empty: { color: theme_1.colors.faint, fontSize: 13, marginTop: 10 },
     row: {
-        backgroundColor: '#16203A',
+        backgroundColor: theme_1.colors.card,
         borderRadius: 8,
         paddingVertical: 10,
         paddingHorizontal: 12,
@@ -121,6 +122,6 @@ const styles = react_native_1.StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
     },
-    teamName: { color: '#E8EEF9', fontSize: 15 },
-    teamMeta: { color: '#8FA3C7', fontSize: 12 },
+    teamName: { color: theme_1.colors.text, fontSize: 15 },
+    teamMeta: { color: theme_1.colors.muted, fontSize: 12 },
 });

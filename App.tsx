@@ -1,27 +1,22 @@
 /**
- * App 根入口（Expo 51 / React 18）：登录注册 → 主界面。
- * 协议面：预鉴权 account.login/register（src/net/preauth.ts）→ HorizonConn 会话 → account.uuids。
- * 旧底座入口（SQLiteProvider/导航/主题）归档于 src-app-legacy/AppEntry.legacy.tsx，
- * 随逐屏迁移增量逐步接线（迁移适配指南 §逐屏适配清单）。
+ * App 根入口（Expo 51 / React 18）：NativeStack 六路由。
+ * 协议面：预鉴权 account.login/register（src/net/preauth.ts）→ HorizonConn 会话 → 各功能屏。
+ * 旧底座入口（SQLiteProvider/导航/主题）归档于 src-app-legacy/AppEntry.legacy.tsx。
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text } from 'react-native';
-import { colors } from './src/ui/theme';
-import { HorizonConn, type Res, type Transport } from './src/net/conn';
+import { StatusBar } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { HorizonConn, type Transport } from './src/net/conn';
 import { RnTransport } from './src/net/transport-rn';
 import { preauthOp } from './src/net/preauth';
-import { LoginScreen } from './src/ui/LoginScreen';
 import { saveLastConn } from './src/ui/lastConn';
-import { HomeScreen } from './src/ui/HomeScreen';
+import { AppContext, type RootStackParamList } from './src/ui/nav';
+import { LoginRoute, HomeRoute, TeamRoute, ChatRoute, MonitorRoute, SessionRoute } from './src/ui/routes';
 
-interface SessionInfo {
-  host: string;
-  port: number;
-  token: string;
-}
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App(): JSX.Element {
-  const [session, setSession] = useState<SessionInfo | null>(null);
   const [conn, setConn] = useState<HorizonConn | null>(null);
   const [connected, setConnected] = useState(false);
   const [uuids, setUuids] = useState<string[]>([]);
@@ -48,15 +43,13 @@ export default function App(): JSX.Element {
           setError(res.m ?? '鉴权失败');
           return;
         }
-        const info: SessionInfo = { host, port, token: res.b.token };
         void saveLastConn({ host, port, name });
         const c = new HorizonConn(new RnTransport() as Transport, {
-          host, port, token: info.token,
+          host, port, token: res.b.token,
         });
         await c.start();
-        const u: Res = await c.req('account.uuids');
+        const u = await c.req('account.uuids');
         setUuids(u.ok && Array.isArray(u.b?.uuids) ? u.b.uuids : []);
-        setSession(info);
         setConn(c);
         setConnected(true);
       } catch (e: any) {
@@ -71,41 +64,26 @@ export default function App(): JSX.Element {
   const disconnect = useCallback(() => {
     conn?.close();
     setConn(null);
-    setSession(null);
     setConnected(false);
     setUuids([]);
   }, [conn]);
 
   return (
-    <SafeAreaView style={styles.root}>
+    <AppContext.Provider value={{ conn, connected, uuids, setUuids, authenticate, disconnect, busy, error }}>
       <StatusBar barStyle="light-content" backgroundColor="#0D1526" />
-      <ScrollView contentContainerStyle={styles.body}>
-        {session == null ? (
-          <LoginScreen onAuthenticate={authenticate} busy={busy} error={error} />
-        ) : (
-          <HomeScreen
-            host={session.host}
-            port={session.port}
-            connected={connected}
-            uuids={uuids}
-            conn={conn}
-            onUuidsChanged={setUuids}
-            onDisconnect={disconnect}
-          />
-        )}
-      </ScrollView>
-      <Text style={styles.footerText}>Horizon · 协议 1.5.x · 会话经 HMAC 鉴权</Text>
-    </SafeAreaView>
+      <NavigationContainer>
+        <Stack.Navigator
+          initialRouteName={conn ? 'Home' : 'Login'}
+          screenOptions={{ headerStyle: { backgroundColor: '#0D1526' }, headerTintColor: '#E8EEF9' }}
+        >
+          <Stack.Screen name="Login" component={LoginRoute} />
+          <Stack.Screen name="Home" component={HomeRoute} />
+          <Stack.Screen name="Team" component={TeamRoute} />
+          <Stack.Screen name="Chat" component={ChatRoute} />
+          <Stack.Screen name="Monitor" component={MonitorRoute} />
+          <Stack.Screen name="Session" component={SessionRoute} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </AppContext.Provider>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  body: { flexGrow: 1, justifyContent: 'center', padding: 16 },
-  footerText: {
-    color: colors.faint,
-    fontSize: 11,
-    textAlign: 'center',
-    paddingBottom: 8,
-  },
-});

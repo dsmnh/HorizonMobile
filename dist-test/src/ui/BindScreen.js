@@ -41,6 +41,7 @@ exports.BindScreen = BindScreen;
  */
 const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
+const theme_1 = require("../ui/theme");
 function BindScreen({ conn, onBound }) {
     const [code, setCode] = (0, react_1.useState)('');
     const [busy, setBusy] = (0, react_1.useState)(false);
@@ -89,26 +90,26 @@ function BindScreen({ conn, onBound }) {
 }
 const styles = react_native_1.StyleSheet.create({
     card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 18 },
-    title: { color: '#E8EEF9', fontSize: 16, fontWeight: '600' },
-    hint: { color: '#5A6B8C', fontSize: 12, marginTop: 4, lineHeight: 18 },
+    title: { color: theme_1.colors.text, fontSize: 16, fontWeight: '600' },
+    hint: { color: theme_1.colors.faint, fontSize: 12, marginTop: 4, lineHeight: 18 },
     row: { flexDirection: 'row', gap: 8, marginTop: 10 },
     input: {
         flex: 1,
-        backgroundColor: '#16203A',
+        backgroundColor: theme_1.colors.card,
         borderRadius: 8,
         paddingHorizontal: 12,
         paddingVertical: 10,
-        color: '#E8EEF9',
+        color: theme_1.colors.text,
         fontSize: 15,
     },
     btn: {
-        backgroundColor: '#2E6BE6',
+        backgroundColor: theme_1.colors.primary,
         borderRadius: 8,
         paddingHorizontal: 16,
         justifyContent: 'center',
     },
     btnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
     disabled: { opacity: 0.5 },
-    error: { color: '#E46A6A', fontSize: 13, marginTop: 8 },
-    ok: { color: '#4CC38A', fontSize: 13, marginTop: 8 },
+    error: { color: theme_1.colors.danger, fontSize: 13, marginTop: 8 },
+    ok: { color: theme_1.colors.ok, fontSize: 13, marginTop: 8 },
 });

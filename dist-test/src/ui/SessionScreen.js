@@ -41,6 +41,7 @@ exports.SessionScreen = SessionScreen;
  */
 const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
+const theme_1 = require("../ui/theme");
 function SessionScreen({ conn, onSelfRevoked }) {
     const [sessions, setSessions] = (0, react_1.useState)([]);
     const [error, setError] = (0, react_1.useState)('');
@@ -104,12 +105,12 @@ function SessionScreen({ conn, onSelfRevoked }) {
 const styles = react_native_1.StyleSheet.create({
     card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 14 },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    title: { color: '#E8EEF9', fontSize: 16, fontWeight: '600' },
-    refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#2E6BE6' },
-    refreshText: { color: '#6E9BF0', fontSize: 12 },
-    error: { color: '#E46A6A', fontSize: 12, marginTop: 8 },
+    title: { color: theme_1.colors.text, fontSize: 16, fontWeight: '600' },
+    refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: theme_1.colors.primary },
+    refreshText: { color: theme_1.colors.primaryText, fontSize: 12 },
+    error: { color: theme_1.colors.danger, fontSize: 12, marginTop: 8 },
     row: {
-        backgroundColor: '#16203A',
+        backgroundColor: theme_1.colors.card,
         borderRadius: 8,
         paddingVertical: 9,
         paddingHorizontal: 12,
@@ -119,8 +120,8 @@ const styles = react_native_1.StyleSheet.create({
         alignItems: 'center',
     },
     meta: { flex: 1, marginRight: 8 },
-    app: { color: '#E8EEF9', fontSize: 14 },
-    seen: { color: '#5A6B8C', fontSize: 11, marginTop: 2 },
-    revokeBtn: { borderWidth: 1, borderColor: '#E46A6A', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
-    revokeText: { color: '#E46A6A', fontSize: 12 },
+    app: { color: theme_1.colors.text, fontSize: 14 },
+    seen: { color: theme_1.colors.faint, fontSize: 11, marginTop: 2 },
+    revokeBtn: { borderWidth: 1, borderColor: theme_1.colors.danger, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
+    revokeText: { color: theme_1.colors.danger, fontSize: 12 },
 });

@@ -41,6 +41,7 @@ exports.TeamOpsScreen = TeamOpsScreen;
  */
 const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
+const theme_1 = require("../ui/theme");
 function TeamOpsScreen({ conn, uuid, onChanged }) {
     const [name, setName] = (0, react_1.useState)('');
     const [busy, setBusy] = (0, react_1.useState)(false);
@@ -106,19 +107,19 @@ function TeamOpsScreen({ conn, uuid, onChanged }) {
 }
 const styles = react_native_1.StyleSheet.create({
     card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 14 },
-    title: { color: '#E8EEF9', fontSize: 16, fontWeight: '600' },
+    title: { color: theme_1.colors.text, fontSize: 16, fontWeight: '600' },
     row: { flexDirection: 'row', gap: 8, marginTop: 10, alignItems: 'center' },
     input: {
         flex: 1,
-        backgroundColor: '#16203A',
+        backgroundColor: theme_1.colors.card,
         borderRadius: 8,
         paddingHorizontal: 12,
         paddingVertical: 9,
-        color: '#E8EEF9',
+        color: theme_1.colors.text,
         fontSize: 14,
     },
     btn: {
-        backgroundColor: '#2E6BE6',
+        backgroundColor: theme_1.colors.primary,
         borderRadius: 8,
         paddingHorizontal: 16,
         paddingVertical: 10,
@@ -128,19 +129,19 @@ const styles = react_native_1.StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderWidth: 1,
-        borderColor: '#2E6BE6',
+        borderColor: theme_1.colors.primary,
     },
     btn2Danger: {
         borderRadius: 8,
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderWidth: 1,
-        borderColor: '#E46A6A',
+        borderColor: theme_1.colors.danger,
     },
-    btn2Text: { color: '#6E9BF0', fontSize: 13 },
-    joinLabel: { color: '#8FA3C7', fontSize: 12 },
+    btn2Text: { color: theme_1.colors.primaryText, fontSize: 13 },
+    joinLabel: { color: theme_1.colors.muted, fontSize: 12 },
     btnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
     disabled: { opacity: 0.5 },
-    error: { color: '#E46A6A', fontSize: 12, marginTop: 8 },
-    ok: { color: '#4CC38A', fontSize: 12, marginTop: 8 },
+    error: { color: theme_1.colors.danger, fontSize: 12, marginTop: 8 },
+    ok: { color: theme_1.colors.ok, fontSize: 12, marginTop: 8 },
 });

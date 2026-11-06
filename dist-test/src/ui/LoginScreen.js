@@ -40,6 +40,7 @@ exports.LoginScreen = LoginScreen;
  */
 const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
+const theme_1 = require("../ui/theme");
 const lastConn_1 = require("./lastConn");
 function LoginScreen({ onAuthenticate, busy, error }) {
     const [host, setHost] = (0, react_1.useState)('');
@@ -96,39 +97,39 @@ function LoginScreen({ onAuthenticate, busy, error }) {
 }
 const styles = react_native_1.StyleSheet.create({
     card: { width: '100%', maxWidth: 420, alignSelf: 'center' },
-    brand: { color: '#E8EEF9', fontSize: 34, fontWeight: '700', letterSpacing: 2 },
-    subtitle: { color: '#5A6B8C', fontSize: 13, marginBottom: 28 },
-    label: { color: '#8FA3C7', fontSize: 12, marginTop: 14, marginBottom: 6 },
+    brand: { color: theme_1.colors.text, fontSize: 34, fontWeight: '700', letterSpacing: 2 },
+    subtitle: { color: theme_1.colors.faint, fontSize: 13, marginBottom: 28 },
+    label: { color: theme_1.colors.muted, fontSize: 12, marginTop: 14, marginBottom: 6 },
     row: { flexDirection: 'row', gap: 8 },
     input: {
         flex: 1,
-        backgroundColor: '#16203A',
+        backgroundColor: theme_1.colors.card,
         borderRadius: 8,
         paddingHorizontal: 12,
         paddingVertical: 10,
-        color: '#E8EEF9',
+        color: theme_1.colors.text,
         fontSize: 15,
     },
     hostInput: {},
     portInput: {
         width: 90,
-        backgroundColor: '#16203A',
+        backgroundColor: theme_1.colors.card,
         borderRadius: 8,
         paddingHorizontal: 12,
         paddingVertical: 10,
-        color: '#E8EEF9',
+        color: theme_1.colors.text,
         fontSize: 15,
     },
-    error: { color: '#E46A6A', fontSize: 13, marginTop: 12 },
+    error: { color: theme_1.colors.danger, fontSize: 13, marginTop: 12 },
     btn: {
         borderRadius: 8,
         paddingVertical: 13,
         alignItems: 'center',
         marginTop: 14,
     },
-    primary: { backgroundColor: '#2E6BE6' },
-    secondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#2E6BE6' },
+    primary: { backgroundColor: theme_1.colors.primary },
+    secondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: theme_1.colors.primary },
     disabled: { opacity: 0.5 },
     btnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-    secondaryText: { color: '#6E9BF0' },
+    secondaryText: { color: theme_1.colors.primaryText },
 });
