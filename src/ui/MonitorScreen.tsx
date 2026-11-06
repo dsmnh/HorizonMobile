@@ -4,7 +4,7 @@
  * MSPT/TPS 由服务端 TickMonitor 5s 窗口采集（HorizonModServer）。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors } from './theme';
 import { HorizonConn, type Res } from '../net/conn';
 
@@ -29,6 +29,8 @@ export function MonitorScreen({ conn }: MonitorScreenProps): JSX.Element {
   const [nodes, setNodes] = useState<NodeFrame[]>([]);
   const [error, setError] = useState('');
   const [polling, setPolling] = useState(true);
+  const [syncNodeId, setSyncNodeId] = useState('');
+  const [syncMsg, setSyncMsg] = useState('');
   const timerRef = useRef<any>(null);
 
   const refresh = useCallback(async () => {
@@ -69,6 +71,28 @@ export function MonitorScreen({ conn }: MonitorScreenProps): JSX.Element {
       {error !== '' && <Text style={styles.error}>{error}</Text>}
       {nodes.length === 0 && error === '' && <Text style={styles.empty}>网络内暂无活跃节点。</Text>}
 
+      <Text style={styles.sectionLabel}>在线榜同步（rank.sync，每日每 UUID 一次；超管/服主）</Text>
+      <View style={styles.syncRow}>
+        <TextInput
+          style={styles.syncInput}
+          value={syncNodeId}
+          onChangeText={setSyncNodeId}
+          placeholder="节点 ID"
+          placeholderTextColor={colors.faint}
+          keyboardType="number-pad"
+        />
+        <Pressable style={styles.syncBtn} disabled={!syncNodeId.trim()}
+          onPress={() => {
+            setSyncMsg('');
+            void conn.req('rank.sync', { nodeId: Number(syncNodeId) }).then((res) => {
+              setSyncMsg(res.ok ? '已排队（queued）' : `rank.sync: ${res.m ?? '失败'}`);
+            }).catch((e: any) => setSyncMsg(String(e.message ?? e)));
+          }}>
+          <Text style={styles.syncBtnText}>同步到本服</Text>
+        </Pressable>
+      </View>
+      {syncMsg !== '' && <Text style={styles.syncMsg}>{syncMsg}</Text>}
+
       {nodes.map((n) => (
         <View key={n.nodeId} style={styles.nodeCard}>
           <View style={styles.nodeHeader}>
@@ -100,6 +124,20 @@ export function MonitorScreen({ conn }: MonitorScreenProps): JSX.Element {
 
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 18 },
+  sectionLabel: { color: colors.faint, fontSize: 11, marginTop: 14 },
+  syncRow: { flexDirection: 'row', gap: 6, marginTop: 6, alignItems: 'center' },
+  syncInput: {
+    width: 90,
+    backgroundColor: colors.card,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: colors.text,
+    fontSize: 13,
+  },
+  syncBtn: { borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
+  syncBtnText: { color: colors.primaryText, fontSize: 12 },
+  syncMsg: { color: colors.ok, fontSize: 12, marginTop: 6 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   toggleBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.primary },

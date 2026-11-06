@@ -85,6 +85,7 @@ async function main() {
     backend.handlers.set('friend.accept', () => ({}));
     backend.handlers.set('friend.remove', () => ({}));
     backend.handlers.set('block.set', () => ({}));
+    backend.handlers.set('rank.sync', () => ({ queued: true }));
     backend.handlers.set('me.list', () => ({ devices: [{ deviceId: 'dev-1', nodeId: 1, owner: 'uuid-a', kind: 'me', shared: [] }] }));
     backend.handlers.set('me.share', () => ({}));
     backend.handlers.set('me.unshare', () => ({}));
@@ -210,6 +211,14 @@ async function main() {
         const share = await conn.req('me.share', { uuid: 'uuid-a', deviceId: 'dev-1', target: 'uuid-b', level: 'control' });
         const unshare = await conn.req('me.unshare', { uuid: 'uuid-a', deviceId: 'dev-1' });
         step('ME 设备域 roundtrip', list.ok && list.b?.devices?.length === 1 && share.ok && unshare.ok, `list=${list.b?.devices?.length} share=${share.ok} unshare=${unshare.ok}`);
+        conn.close();
+    }
+    // 12) rank.sync roundtrip
+    {
+        const conn = new conn_1.HorizonConn(new transport_node_1.NodeTransport(), { host: '127.0.0.1', port, token: backend.token });
+        await conn.start();
+        const sync = await conn.req('rank.sync', { uuid: 'uuid-a', nodeId: 1 });
+        step('rank.sync roundtrip', sync.ok && sync.b?.queued === true, JSON.stringify(sync.b));
         conn.close();
     }
     backend.close();

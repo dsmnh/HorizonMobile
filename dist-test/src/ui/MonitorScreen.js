@@ -46,6 +46,8 @@ function MonitorScreen({ conn }) {
     const [nodes, setNodes] = (0, react_1.useState)([]);
     const [error, setError] = (0, react_1.useState)('');
     const [polling, setPolling] = (0, react_1.useState)(true);
+    const [syncNodeId, setSyncNodeId] = (0, react_1.useState)('');
+    const [syncMsg, setSyncMsg] = (0, react_1.useState)('');
     const timerRef = (0, react_1.useRef)(null);
     const refresh = (0, react_1.useCallback)(async () => {
         setError('');
@@ -85,6 +87,20 @@ function MonitorScreen({ conn }) {
       {error !== '' && <react_native_1.Text style={styles.error}>{error}</react_native_1.Text>}
       {nodes.length === 0 && error === '' && <react_native_1.Text style={styles.empty}>网络内暂无活跃节点。</react_native_1.Text>}
 
+      <react_native_1.Text style={styles.sectionLabel}>在线榜同步（rank.sync，每日每 UUID 一次；超管/服主）</react_native_1.Text>
+      <react_native_1.View style={styles.syncRow}>
+        <react_native_1.TextInput style={styles.syncInput} value={syncNodeId} onChangeText={setSyncNodeId} placeholder="节点 ID" placeholderTextColor={theme_1.colors.faint} keyboardType="number-pad"/>
+        <react_native_1.Pressable style={styles.syncBtn} disabled={!syncNodeId.trim()} onPress={() => {
+            setSyncMsg('');
+            void conn.req('rank.sync', { nodeId: Number(syncNodeId) }).then((res) => {
+                setSyncMsg(res.ok ? '已排队（queued）' : `rank.sync: ${res.m ?? '失败'}`);
+            }).catch((e) => setSyncMsg(String(e.message ?? e)));
+        }}>
+          <react_native_1.Text style={styles.syncBtnText}>同步到本服</react_native_1.Text>
+        </react_native_1.Pressable>
+      </react_native_1.View>
+      {syncMsg !== '' && <react_native_1.Text style={styles.syncMsg}>{syncMsg}</react_native_1.Text>}
+
       {nodes.map((n) => (<react_native_1.View key={n.nodeId} style={styles.nodeCard}>
           <react_native_1.View style={styles.nodeHeader}>
             <react_native_1.Text style={styles.nodeName}>{n.name ?? `节点 ${n.nodeId}`}</react_native_1.Text>
@@ -104,6 +120,20 @@ function MonitorScreen({ conn }) {
 }
 const styles = react_native_1.StyleSheet.create({
     card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 18 },
+    sectionLabel: { color: theme_1.colors.faint, fontSize: 11, marginTop: 14 },
+    syncRow: { flexDirection: 'row', gap: 6, marginTop: 6, alignItems: 'center' },
+    syncInput: {
+        width: 90,
+        backgroundColor: theme_1.colors.card,
+        borderRadius: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        color: theme_1.colors.text,
+        fontSize: 13,
+    },
+    syncBtn: { borderWidth: 1, borderColor: theme_1.colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
+    syncBtnText: { color: theme_1.colors.primaryText, fontSize: 12 },
+    syncMsg: { color: theme_1.colors.ok, fontSize: 12, marginTop: 6 },
     headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     title: { color: theme_1.colors.text, fontSize: 16, fontWeight: '600' },
     toggleBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: theme_1.colors.primary },
