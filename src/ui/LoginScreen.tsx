@@ -2,8 +2,9 @@
  * 登录/注册屏（迁移适配指南 §SetupScreen）：后端地址 + 账号密码 + 双动作。
  * 协议面：预鉴权 account.login / account.register（src/net/preauth.ts）。
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { loadLastConn } from './lastConn';
 
 export interface LoginScreenProps {
   onAuthenticate: (
@@ -18,10 +19,23 @@ export interface LoginScreenProps {
 }
 
 export function LoginScreen({ onAuthenticate, busy, error }: LoginScreenProps): JSX.Element {
-  const [host, setHost] = useState('192.168.66.201');
-  const [port, setPort] = useState('44544');
+  const [host, setHost] = useState('');
+  const [port, setPort] = useState('');
   const [name, setName] = useState('');
   const [pass, setPass] = useState('');
+  const [loaded, setLoaded] = useState(false);
+
+  // 上次成功连接的地址与账号名预填（AsyncStorage；失败保持空表单）
+  useEffect(() => {
+    void loadLastConn().then((last) => {
+      if (last) {
+        setHost(last.host);
+        setPort(String(last.port));
+        setName(last.name);
+      }
+      setLoaded(true);
+    });
+  }, []);
 
   const submit = (mode: 'login' | 'register') => {
     const p = parseInt(port, 10);
@@ -30,6 +44,10 @@ export function LoginScreen({ onAuthenticate, busy, error }: LoginScreenProps): 
     }
     void onAuthenticate(host, p, mode, name, pass);
   };
+
+  if (!loaded) {
+    return <View style={styles.card} />;
+  }
 
   return (
     <View style={styles.card}>

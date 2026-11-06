@@ -40,11 +40,24 @@ exports.LoginScreen = LoginScreen;
  */
 const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
+const lastConn_1 = require("./lastConn");
 function LoginScreen({ onAuthenticate, busy, error }) {
-    const [host, setHost] = (0, react_1.useState)('192.168.66.201');
-    const [port, setPort] = (0, react_1.useState)('44544');
+    const [host, setHost] = (0, react_1.useState)('');
+    const [port, setPort] = (0, react_1.useState)('');
     const [name, setName] = (0, react_1.useState)('');
     const [pass, setPass] = (0, react_1.useState)('');
+    const [loaded, setLoaded] = (0, react_1.useState)(false);
+    // 上次成功连接的地址与账号名预填（AsyncStorage；失败保持空表单）
+    (0, react_1.useEffect)(() => {
+        void (0, lastConn_1.loadLastConn)().then((last) => {
+            if (last) {
+                setHost(last.host);
+                setPort(String(last.port));
+                setName(last.name);
+            }
+            setLoaded(true);
+        });
+    }, []);
     const submit = (mode) => {
         const p = parseInt(port, 10);
         if (!host || !p || !name || !pass) {
@@ -52,6 +65,9 @@ function LoginScreen({ onAuthenticate, busy, error }) {
         }
         void onAuthenticate(host, p, mode, name, pass);
     };
+    if (!loaded) {
+        return <react_native_1.View style={styles.card}/>;
+    }
     return (<react_native_1.View style={styles.card}>
       <react_native_1.Text style={styles.brand}>Horizon</react_native_1.Text>
       <react_native_1.Text style={styles.subtitle}>深空矩阵新视野 · 移动端</react_native_1.Text>

@@ -10,6 +10,7 @@ import { HorizonConn, type Res, type Transport } from './src/net/conn';
 import { RnTransport } from './src/net/transport-rn';
 import { preauthOp } from './src/net/preauth';
 import { LoginScreen } from './src/ui/LoginScreen';
+import { saveLastConn } from './src/ui/lastConn';
 import { HomeScreen } from './src/ui/HomeScreen';
 
 interface SessionInfo {
@@ -47,6 +48,7 @@ export default function App(): JSX.Element {
           return;
         }
         const info: SessionInfo = { host, port, token: res.b.token };
+        void saveLastConn({ host, port, name });
         const c = new HorizonConn(new RnTransport() as Transport, {
           host, port, token: info.token,
         });
