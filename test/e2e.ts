@@ -2,6 +2,7 @@
 import { strict as assert } from 'node:assert';
 import { MockAppBackend } from '../mock/server.cjs';
 import { HorizonConn } from '../src/net/conn';
+import { preauthOp } from '../src/net/preauth';
 import { NodeTransport } from './transport-node';
 
 process.on('unhandledRejection', (reason) => {
@@ -96,6 +97,7 @@ async function main(): Promise<void> {
   backend.handlers.set('block.set', () => ({}));
 
   backend.handlers.set('rank.sync', () => ({ queued: true }));
+  backend.handlers.set('silent.op', () => undefined); // 不回包（超时用例）
 
   backend.handlers.set('me.list', () => ({ devices: [{ deviceId: 'dev-1', nodeId: 1, owner: 'uuid-a', kind: 'me', shared: [] }] }));
   backend.handlers.set('me.share', () => ({}));
@@ -279,6 +281,25 @@ async function main(): Promise<void> {
     step('重连风暴硬化（两轮踢线）', authDelta === 2 && authSecond === 1 && sid1 !== sid2,
       `authDelta=${authDelta}（第二轮=${authSecond}，sid 两轮均变更）`);
     stream.close();
+    conn.close();
+  }
+
+  // 14) 边界路径：预鉴权错误结构 + REQ 超时
+  {
+    // 重复账号名注册：mock 无此校验，改用未知 op 的结构化错误路径
+    const bad = await preauthOp(new NodeTransport(), '127.0.0.1', port, 'no.such.preauth', {});
+    step('预鉴权错误结构化传播', !bad.ok && typeof bad.m === 'string' && bad.m.length > 0,
+      `m=${bad.m}`);
+    const conn = new HorizonConn(new NodeTransport(), { host: '127.0.0.1', port, token: backend.token, requestTimeoutMs: 800 });
+    await conn.start();
+    const t0 = Date.now();
+    let timedOut = false;
+    try {
+      await conn.req('silent.op');
+    } catch (e: any) {
+      timedOut = e.message.includes('超时') && Date.now() - t0 < 3000;
+    }
+    step('REQ 超时按 requestTimeoutMs 触发', timedOut, `elapsed=${Date.now() - t0}ms`);
     conn.close();
   }
 

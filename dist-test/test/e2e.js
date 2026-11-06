@@ -4,6 +4,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const node_assert_1 = require("node:assert");
 const server_cjs_1 = require("../mock/server.cjs");
 const conn_1 = require("../src/net/conn");
+const preauth_1 = require("../src/net/preauth");
 const transport_node_1 = require("./transport-node");
 process.on('unhandledRejection', (reason) => {
     // 迟到的断连 reject（旧连接的 pending）不视为测试失败，记录即可
@@ -86,6 +87,7 @@ async function main() {
     backend.handlers.set('friend.remove', () => ({}));
     backend.handlers.set('block.set', () => ({}));
     backend.handlers.set('rank.sync', () => ({ queued: true }));
+    backend.handlers.set('silent.op', () => undefined); // 不回包（超时用例）
     backend.handlers.set('me.list', () => ({ devices: [{ deviceId: 'dev-1', nodeId: 1, owner: 'uuid-a', kind: 'me', shared: [] }] }));
     backend.handlers.set('me.share', () => ({}));
     backend.handlers.set('me.unshare', () => ({}));
@@ -244,6 +246,24 @@ async function main() {
         // 两轮各恰一次鉴权（单飞；>3 即存在循环倍增）
         step('重连风暴硬化（两轮踢线）', authDelta === 2 && authSecond === 1 && sid1 !== sid2, `authDelta=${authDelta}（第二轮=${authSecond}，sid 两轮均变更）`);
         stream.close();
+        conn.close();
+    }
+    // 14) 边界路径：预鉴权错误结构 + REQ 超时
+    {
+        // 重复账号名注册：mock 无此校验，改用未知 op 的结构化错误路径
+        const bad = await (0, preauth_1.preauthOp)(new transport_node_1.NodeTransport(), '127.0.0.1', port, 'no.such.preauth', {});
+        step('预鉴权错误结构化传播', !bad.ok && typeof bad.m === 'string' && bad.m.length > 0, `m=${bad.m}`);
+        const conn = new conn_1.HorizonConn(new transport_node_1.NodeTransport(), { host: '127.0.0.1', port, token: backend.token, requestTimeoutMs: 800 });
+        await conn.start();
+        const t0 = Date.now();
+        let timedOut = false;
+        try {
+            await conn.req('silent.op');
+        }
+        catch (e) {
+            timedOut = e.message.includes('超时') && Date.now() - t0 < 3000;
+        }
+        step('REQ 超时按 requestTimeoutMs 触发', timedOut, `elapsed=${Date.now() - t0}ms`);
         conn.close();
     }
     backend.close();
