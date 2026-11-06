@@ -8,6 +8,7 @@ import { type HorizonConn } from '../net/conn';
 import { TeamScreen } from './TeamScreen';
 import { ChatScreen } from './ChatScreen';
 import { TeamOpsScreen } from './TeamOpsScreen';
+import { TeamRosterScreen } from './TeamRosterScreen';
 import { BindScreen } from './BindScreen';
 import { MonitorScreen } from './MonitorScreen';
 import { SessionScreen } from './SessionScreen';
@@ -55,6 +56,7 @@ export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, o
             <>
               <TeamScreen conn={conn} uuid={uuids[0]} />
               <TeamOpsScreen conn={conn} uuid={uuids[0]} onChanged={() => undefined} />
+              <TeamRosterScreen conn={conn} uuid={uuids[0]} />
               <ChatScreen conn={conn} uuid={uuids[0]} />
             </>
           )}

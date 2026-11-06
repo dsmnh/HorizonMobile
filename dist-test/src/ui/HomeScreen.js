@@ -13,6 +13,7 @@ const react_native_1 = require("react-native");
 const TeamScreen_1 = require("./TeamScreen");
 const ChatScreen_1 = require("./ChatScreen");
 const TeamOpsScreen_1 = require("./TeamOpsScreen");
+const TeamRosterScreen_1 = require("./TeamRosterScreen");
 const BindScreen_1 = require("./BindScreen");
 const MonitorScreen_1 = require("./MonitorScreen");
 const SessionScreen_1 = require("./SessionScreen");
@@ -38,6 +39,7 @@ function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, onUuidsC
           {conn != null && (<>
               <TeamScreen_1.TeamScreen conn={conn} uuid={uuids[0]}/>
               <TeamOpsScreen_1.TeamOpsScreen conn={conn} uuid={uuids[0]} onChanged={() => undefined}/>
+              <TeamRosterScreen_1.TeamRosterScreen conn={conn} uuid={uuids[0]}/>
               <ChatScreen_1.ChatScreen conn={conn} uuid={uuids[0]}/>
             </>)}
         </react_native_1.View>)}

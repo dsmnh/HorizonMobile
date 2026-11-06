@@ -91,7 +91,16 @@ async function main(): Promise<void> {
 
   backend.handlers.set('team.leave', () => ({}));
   backend.handlers.set('team.disband', () => ({}));
-  backend.handlers.set('team.info', () => ({ teamId: 1, name: 'mock队', members: [] }));
+  backend.handlers.set('team.info', () => ({ team: { teamId: 42, name: 'mock队', joinMode: 'open', members: [{ uuid: 'uuid-a', role: 'leader' }, { uuid: 'uuid-b', role: 'member' }] } }));
+  backend.handlers.set('team.invite', () => ({ inviteId: 9, expiresAt: 99 }));
+  backend.handlers.set('team.acceptInvite', () => ({ teamId: 42 }));
+  backend.handlers.set('team.declineInvite', () => ({}));
+  backend.handlers.set('team.apply', () => ({ applyId: 7, expiresAt: 99 }));
+  backend.handlers.set('team.approveApply', () => ({ teamId: 42 }));
+  backend.handlers.set('team.denyApply', () => ({}));
+  backend.handlers.set('team.kick', () => ({}));
+  backend.handlers.set('team.setRole', () => ({}));
+  backend.handlers.set('team.transfer', () => ({}));
   backend.handlers.set('team.setJoinMode', () => ({}));
 
   // 5) 错误传播
@@ -163,6 +172,22 @@ async function main(): Promise<void> {
     step('队伍操作 roundtrip',
       created.ok && created.b?.teamId === 42 && info.ok && mode.ok && disband.ok,
       `create=${created.b?.teamId} info=${info.ok} mode=${mode.ok} disband=${disband.ok}`);
+
+    // 9) 成员与审批 roundtrip：info(成员)→invite→acceptInvite→apply→approveApply→kick→setRole→transfer→denyApply
+    const roster = await conn.req('team.info', { uuid: 'uuid-a' });
+    const membersOk = roster.ok && roster.b?.team?.members?.length === 2;
+    const inv = await conn.req('team.invite', { uuid: 'uuid-a', target: 'uuid-c' });
+    const acc = await conn.req('team.acceptInvite', { uuid: 'uuid-c', inviteId: inv.b?.inviteId });
+    const dec = await conn.req('team.declineInvite', { uuid: 'uuid-c', inviteId: 1 });
+    const app = await conn.req('team.apply', { uuid: 'uuid-c', teamId: 42 });
+    const appr = await conn.req('team.approveApply', { uuid: 'uuid-a', applyId: app.b?.applyId });
+    const deny = await conn.req('team.denyApply', { uuid: 'uuid-a', applyId: 1 });
+    const kick = await conn.req('team.kick', { uuid: 'uuid-a', target: 'uuid-b' });
+    const role = await conn.req('team.setRole', { uuid: 'uuid-a', target: 'uuid-b', role: 'vice' });
+    const xfer = await conn.req('team.transfer', { uuid: 'uuid-a', target: 'uuid-b' });
+    step('成员与审批 roundtrip',
+      membersOk && inv.ok && acc.ok && dec.ok && app.ok && appr.ok && deny.ok && kick.ok && role.ok && xfer.ok,
+      `info=${membersOk} inv=${inv.b?.inviteId} acc=${acc.ok} dec=${dec.ok} app=${app.b?.applyId} appr=${appr.ok} deny=${deny.ok} kick=${kick.ok} role=${role.ok} xfer=${xfer.ok}`);
     conn.close();
   }
 
