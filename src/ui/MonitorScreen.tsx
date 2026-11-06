@@ -5,6 +5,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { colors } from '../ui/theme';
 import { HorizonConn, type Res } from '../net/conn';
 
 interface NodeFrame {
@@ -100,22 +101,22 @@ export function MonitorScreen({ conn }: MonitorScreenProps): JSX.Element {
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 18 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { color: '#E8EEF9', fontSize: 16, fontWeight: '600' },
-  toggleBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#2E6BE6' },
-  toggleText: { color: '#6E9BF0', fontSize: 12 },
-  error: { color: '#E46A6A', fontSize: 13, marginTop: 8 },
-  empty: { color: '#5A6B8C', fontSize: 13, marginTop: 10 },
+  title: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  toggleBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.primary },
+  toggleText: { color: colors.primaryText, fontSize: 12 },
+  error: { color: colors.danger, fontSize: 13, marginTop: 8 },
+  empty: { color: colors.faint, fontSize: 13, marginTop: 10 },
   nodeCard: {
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
     marginTop: 8,
   },
   nodeHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  nodeName: { color: '#E8EEF9', fontSize: 15 },
-  online: { color: '#4CC38A', fontSize: 12 },
-  offline: { color: '#E4A24C', fontSize: 12 },
-  metrics: { color: '#8FA3C7', fontSize: 13, marginTop: 6 },
-  dim: { color: '#5A6B8C', fontSize: 11, marginTop: 3 },
+  nodeName: { color: colors.text, fontSize: 15 },
+  online: { color: colors.ok, fontSize: 12 },
+  offline: { color: colors.warn, fontSize: 12 },
+  metrics: { color: colors.muted, fontSize: 13, marginTop: 6 },
+  dim: { color: colors.faint, fontSize: 11, marginTop: 3 },
 });

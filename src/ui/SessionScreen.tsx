@@ -5,6 +5,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { colors } from '../ui/theme';
 import { HorizonConn, type Res } from '../net/conn';
 
 interface SessionRow {
@@ -87,12 +88,12 @@ export function SessionScreen({ conn, onSelfRevoked }: SessionScreenProps): JSX.
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 14 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { color: '#E8EEF9', fontSize: 16, fontWeight: '600' },
-  refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#2E6BE6' },
-  refreshText: { color: '#6E9BF0', fontSize: 12 },
-  error: { color: '#E46A6A', fontSize: 12, marginTop: 8 },
+  title: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.primary },
+  refreshText: { color: colors.primaryText, fontSize: 12 },
+  error: { color: colors.danger, fontSize: 12, marginTop: 8 },
   row: {
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingVertical: 9,
     paddingHorizontal: 12,
@@ -102,8 +103,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   meta: { flex: 1, marginRight: 8 },
-  app: { color: '#E8EEF9', fontSize: 14 },
-  seen: { color: '#5A6B8C', fontSize: 11, marginTop: 2 },
-  revokeBtn: { borderWidth: 1, borderColor: '#E46A6A', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
-  revokeText: { color: '#E46A6A', fontSize: 12 },
+  app: { color: colors.text, fontSize: 14 },
+  seen: { color: colors.faint, fontSize: 11, marginTop: 2 },
+  revokeBtn: { borderWidth: 1, borderColor: colors.danger, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
+  revokeText: { color: colors.danger, fontSize: 12 },
 });

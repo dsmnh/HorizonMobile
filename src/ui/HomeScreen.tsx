@@ -4,6 +4,7 @@
  */
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { colors } from '../ui/theme';
 import { type HorizonConn } from '../net/conn';
 import { TeamScreen } from './TeamScreen';
 import { ChatScreen } from './ChatScreen';
@@ -81,31 +82,31 @@ export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, o
 
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, alignSelf: 'center' },
-  brand: { color: '#E8EEF9', fontSize: 30, fontWeight: '700', letterSpacing: 2 },
+  brand: { color: colors.text, fontSize: 30, fontWeight: '700', letterSpacing: 2 },
   statusRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, marginBottom: 20 },
   dot: { width: 9, height: 9, borderRadius: 5, marginRight: 8 },
-  dotOn: { backgroundColor: '#4CC38A' },
-  dotOff: { backgroundColor: '#E4A24C' },
-  statusText: { color: '#8FA3C7', fontSize: 13 },
-  label: { color: '#8FA3C7', fontSize: 12, marginTop: 14, marginBottom: 6 },
-  empty: { color: '#5A6B8C', fontSize: 13, lineHeight: 20 },
+  dotOn: { backgroundColor: colors.ok },
+  dotOff: { backgroundColor: colors.warn },
+  statusText: { color: colors.muted, fontSize: 13 },
+  label: { color: colors.muted, fontSize: 12, marginTop: 14, marginBottom: 6 },
+  empty: { color: colors.faint, fontSize: 13, lineHeight: 20 },
   uuidRow: {
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
     marginTop: 6,
   },
-  uuidRowActive: { borderWidth: 1, borderColor: '#2E6BE6' },
-  uuidText: { color: '#E8EEF9', fontSize: 13 },
-  uuidTextActive: { color: '#6E9BF0' },
+  uuidRowActive: { borderWidth: 1, borderColor: colors.primary },
+  uuidText: { color: colors.text, fontSize: 13 },
+  uuidTextActive: { color: colors.primaryText },
   btn: {
     borderRadius: 8,
     paddingVertical: 13,
     alignItems: 'center',
     marginTop: 26,
     borderWidth: 1,
-    borderColor: '#E46A6A',
+    borderColor: colors.danger,
   },
-  btnText: { color: '#E46A6A', fontSize: 15, fontWeight: '600' },
+  btnText: { color: colors.danger, fontSize: 15, fontWeight: '600' },
 });

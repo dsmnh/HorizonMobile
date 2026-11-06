@@ -6,6 +6,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text } from 'react-native';
+import { colors } from './src/ui/theme';
 import { HorizonConn, type Res, type Transport } from './src/net/conn';
 import { RnTransport } from './src/net/transport-rn';
 import { preauthOp } from './src/net/preauth';
@@ -99,10 +100,10 @@ export default function App(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0D1526' },
+  root: { flex: 1, backgroundColor: colors.bg },
   body: { flexGrow: 1, justifyContent: 'center', padding: 16 },
   footerText: {
-    color: '#5A6B8C',
+    color: colors.faint,
     fontSize: 11,
     textAlign: 'center',
     paddingBottom: 8,

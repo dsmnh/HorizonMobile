@@ -5,6 +5,7 @@
  */
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { colors } from '../ui/theme';
 import { HorizonConn, type Res } from '../net/conn';
 
 export interface BindScreenProps {
@@ -70,26 +71,26 @@ export function BindScreen({ conn, onBound }: BindScreenProps): JSX.Element {
 
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 18 },
-  title: { color: '#E8EEF9', fontSize: 16, fontWeight: '600' },
-  hint: { color: '#5A6B8C', fontSize: 12, marginTop: 4, lineHeight: 18 },
+  title: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  hint: { color: colors.faint, fontSize: 12, marginTop: 4, lineHeight: 18 },
   row: { flexDirection: 'row', gap: 8, marginTop: 10 },
   input: {
     flex: 1,
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#E8EEF9',
+    color: colors.text,
     fontSize: 15,
   },
   btn: {
-    backgroundColor: '#2E6BE6',
+    backgroundColor: colors.primary,
     borderRadius: 8,
     paddingHorizontal: 16,
     justifyContent: 'center',
   },
   btnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   disabled: { opacity: 0.5 },
-  error: { color: '#E46A6A', fontSize: 13, marginTop: 8 },
-  ok: { color: '#4CC38A', fontSize: 13, marginTop: 8 },
+  error: { color: colors.danger, fontSize: 13, marginTop: 8 },
+  ok: { color: colors.ok, fontSize: 13, marginTop: 8 },
 });

@@ -5,6 +5,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { colors } from '../ui/theme';
 import { HorizonConn, type Stream, type TeamEvent } from '../net/conn';
 
 interface ChatMessage {
@@ -132,33 +133,33 @@ export function ChatScreen({ conn, uuid }: ChatScreenProps): JSX.Element {
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, alignSelf: 'center', flex: 1, maxHeight: 520 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { color: '#E8EEF9', fontSize: 20, fontWeight: '700' },
-  refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#2E6BE6' },
-  refreshText: { color: '#6E9BF0', fontSize: 12 },
-  error: { color: '#E46A6A', fontSize: 13, marginTop: 8 },
+  title: { color: colors.text, fontSize: 20, fontWeight: '700' },
+  refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.primary },
+  refreshText: { color: colors.primaryText, fontSize: 12 },
+  error: { color: colors.danger, fontSize: 13, marginTop: 8 },
   list: { marginTop: 10, flexGrow: 0 },
   msgRow: {
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
     marginTop: 6,
   },
-  msgFrom: { color: '#8FA3C7', fontSize: 11 },
-  msgText: { color: '#E8EEF9', fontSize: 14, marginTop: 2 },
-  empty: { color: '#5A6B8C', fontSize: 13, marginTop: 10 },
+  msgFrom: { color: colors.muted, fontSize: 11 },
+  msgText: { color: colors.text, fontSize: 14, marginTop: 2 },
+  empty: { color: colors.faint, fontSize: 13, marginTop: 10 },
   inputRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
   input: {
     flex: 1,
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#E8EEF9',
+    color: colors.text,
     fontSize: 15,
   },
   sendBtn: {
-    backgroundColor: '#2E6BE6',
+    backgroundColor: colors.primary,
     borderRadius: 8,
     paddingHorizontal: 16,
     justifyContent: 'center',

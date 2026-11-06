@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { colors } from '../ui/theme';
 import { loadLastConn } from './lastConn';
 
 export interface LoginScreenProps {
@@ -108,39 +109,39 @@ export function LoginScreen({ onAuthenticate, busy, error }: LoginScreenProps): 
 
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, alignSelf: 'center' },
-  brand: { color: '#E8EEF9', fontSize: 34, fontWeight: '700', letterSpacing: 2 },
-  subtitle: { color: '#5A6B8C', fontSize: 13, marginBottom: 28 },
-  label: { color: '#8FA3C7', fontSize: 12, marginTop: 14, marginBottom: 6 },
+  brand: { color: colors.text, fontSize: 34, fontWeight: '700', letterSpacing: 2 },
+  subtitle: { color: colors.faint, fontSize: 13, marginBottom: 28 },
+  label: { color: colors.muted, fontSize: 12, marginTop: 14, marginBottom: 6 },
   row: { flexDirection: 'row', gap: 8 },
   input: {
     flex: 1,
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#E8EEF9',
+    color: colors.text,
     fontSize: 15,
   },
   hostInput: {},
   portInput: {
     width: 90,
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    color: '#E8EEF9',
+    color: colors.text,
     fontSize: 15,
   },
-  error: { color: '#E46A6A', fontSize: 13, marginTop: 12 },
+  error: { color: colors.danger, fontSize: 13, marginTop: 12 },
   btn: {
     borderRadius: 8,
     paddingVertical: 13,
     alignItems: 'center',
     marginTop: 14,
   },
-  primary: { backgroundColor: '#2E6BE6' },
-  secondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#2E6BE6' },
+  primary: { backgroundColor: colors.primary },
+  secondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.primary },
   disabled: { opacity: 0.5 },
   btnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
-  secondaryText: { color: '#6E9BF0' },
+  secondaryText: { color: colors.primaryText },
 });

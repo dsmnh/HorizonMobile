@@ -5,6 +5,7 @@
  */
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { colors } from '../ui/theme';
 import { HorizonConn, type Res } from '../net/conn';
 
 export interface TeamOpsScreenProps {
@@ -92,19 +93,19 @@ export function TeamOpsScreen({ conn, uuid, onChanged }: TeamOpsScreenProps): JS
 
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 14 },
-  title: { color: '#E8EEF9', fontSize: 16, fontWeight: '600' },
+  title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   row: { flexDirection: 'row', gap: 8, marginTop: 10, alignItems: 'center' },
   input: {
     flex: 1,
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 9,
-    color: '#E8EEF9',
+    color: colors.text,
     fontSize: 14,
   },
   btn: {
-    backgroundColor: '#2E6BE6',
+    backgroundColor: colors.primary,
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -114,19 +115,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#2E6BE6',
+    borderColor: colors.primary,
   },
   btn2Danger: {
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: '#E46A6A',
+    borderColor: colors.danger,
   },
-  btn2Text: { color: '#6E9BF0', fontSize: 13 },
-  joinLabel: { color: '#8FA3C7', fontSize: 12 },
+  btn2Text: { color: colors.primaryText, fontSize: 13 },
+  joinLabel: { color: colors.muted, fontSize: 12 },
   btnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
   disabled: { opacity: 0.5 },
-  error: { color: '#E46A6A', fontSize: 12, marginTop: 8 },
-  ok: { color: '#4CC38A', fontSize: 12, marginTop: 8 },
+  error: { color: colors.danger, fontSize: 12, marginTop: 8 },
+  ok: { color: colors.ok, fontSize: 12, marginTop: 8 },
 });

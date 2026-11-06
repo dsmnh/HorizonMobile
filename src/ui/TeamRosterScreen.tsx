@@ -6,6 +6,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { colors } from '../ui/theme';
 import { HorizonConn, type Res } from '../net/conn';
 
 interface MemberRow {
@@ -172,11 +173,11 @@ export function TeamRosterScreen({ conn, uuid, onChanged }: TeamRosterScreenProp
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 14 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { color: '#E8EEF9', fontSize: 16, fontWeight: '600' },
-  refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#2E6BE6' },
-  refreshText: { color: '#6E9BF0', fontSize: 12 },
+  title: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.primary },
+  refreshText: { color: colors.primaryText, fontSize: 12 },
   memberRow: {
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -186,25 +187,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   memberMeta: { flex: 1, marginRight: 8 },
-  memberUuid: { color: '#E8EEF9', fontSize: 12 },
-  memberRole: { color: '#8FA3C7', fontSize: 11, marginTop: 2 },
+  memberUuid: { color: colors.text, fontSize: 12 },
+  memberRole: { color: colors.muted, fontSize: 11, marginTop: 2 },
   memberActions: { flexDirection: 'row', gap: 6 },
-  miniBtn: { borderWidth: 1, borderColor: '#2E6BE6', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
-  miniText: { color: '#6E9BF0', fontSize: 11 },
+  miniBtn: { borderWidth: 1, borderColor: colors.primary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  miniText: { color: colors.primaryText, fontSize: 11 },
   idRow: { flexDirection: 'row', gap: 6, marginTop: 8, alignItems: 'center' },
   input: {
     flex: 1,
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    color: '#E8EEF9',
+    color: colors.text,
     fontSize: 13,
   },
-  btn: { backgroundColor: '#2E6BE6', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
+  btn: { backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
   btnText: { color: '#FFFFFF', fontSize: 13, fontWeight: '600' },
-  btnSecondary: { borderWidth: 1, borderColor: '#2E6BE6', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
-  btnSecondaryText: { color: '#6E9BF0', fontSize: 13 },
-  error: { color: '#E46A6A', fontSize: 12, marginTop: 8 },
-  ok: { color: '#4CC38A', fontSize: 12, marginTop: 8 },
+  btnSecondary: { borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
+  btnSecondaryText: { color: colors.primaryText, fontSize: 13 },
+  error: { color: colors.danger, fontSize: 12, marginTop: 8 },
+  ok: { color: colors.ok, fontSize: 12, marginTop: 8 },
 });

@@ -5,6 +5,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { colors } from '../ui/theme';
 import { HorizonConn, type Stream, type TeamEvent } from '../net/conn';
 
 interface TeamRow {
@@ -92,14 +93,14 @@ export function TeamScreen({ conn, uuid }: TeamScreenProps): JSX.Element {
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, alignSelf: 'center' },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { color: '#E8EEF9', fontSize: 22, fontWeight: '700' },
-  refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#2E6BE6' },
-  refreshText: { color: '#6E9BF0', fontSize: 12 },
-  event: { color: '#4CC38A', fontSize: 12, marginTop: 8 },
-  error: { color: '#E46A6A', fontSize: 13, marginTop: 10 },
-  empty: { color: '#5A6B8C', fontSize: 13, marginTop: 10 },
+  title: { color: colors.text, fontSize: 22, fontWeight: '700' },
+  refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.primary },
+  refreshText: { color: colors.primaryText, fontSize: 12 },
+  event: { color: colors.ok, fontSize: 12, marginTop: 8 },
+  error: { color: colors.danger, fontSize: 13, marginTop: 10 },
+  empty: { color: colors.faint, fontSize: 13, marginTop: 10 },
   row: {
-    backgroundColor: '#16203A',
+    backgroundColor: colors.card,
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -108,6 +109,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  teamName: { color: '#E8EEF9', fontSize: 15 },
-  teamMeta: { color: '#8FA3C7', fontSize: 12 },
+  teamName: { color: colors.text, fontSize: 15 },
+  teamMeta: { color: colors.muted, fontSize: 12 },
 });

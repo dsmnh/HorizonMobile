@@ -3,6 +3,7 @@
  */
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { colors } from '../ui/theme';
 
 export function AboutScreen(): JSX.Element {
   return (
@@ -19,7 +20,7 @@ export function AboutScreen(): JSX.Element {
 
 const styles = StyleSheet.create({
   card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 18 },
-  brand: { color: '#E8EEF9', fontSize: 26, fontWeight: '700', letterSpacing: 2 },
-  sub: { color: '#5A6B8C', fontSize: 12, marginTop: 4, marginBottom: 14 },
-  line: { color: '#8FA3C7', fontSize: 12, marginTop: 6, lineHeight: 18 },
+  brand: { color: colors.text, fontSize: 26, fontWeight: '700', letterSpacing: 2 },
+  sub: { color: colors.faint, fontSize: 12, marginTop: 4, marginBottom: 14 },
+  line: { color: colors.muted, fontSize: 12, marginTop: 6, lineHeight: 18 },
 });
