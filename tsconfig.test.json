@@ -8,8 +8,14 @@
     "allowJs": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "lib": ["ES2020"]
+    "lib": [
+      "ES2020"
+    ],
+    "jsx": "react-native"
   },
-  
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "src/**/*.tsx"
+  ]
 }

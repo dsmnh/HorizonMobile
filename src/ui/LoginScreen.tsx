@@ -1,0 +1,128 @@
+/**
+ * 登录/注册屏（迁移适配指南 §SetupScreen）：后端地址 + 账号密码 + 双动作。
+ * 协议面：预鉴权 account.login / account.register（src/net/preauth.ts）。
+ */
+import React, { useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+
+export interface LoginScreenProps {
+  onAuthenticate: (
+    host: string,
+    port: number,
+    mode: 'login' | 'register',
+    name: string,
+    pass: string,
+  ) => Promise<void>;
+  busy: boolean;
+  error: string;
+}
+
+export function LoginScreen({ onAuthenticate, busy, error }: LoginScreenProps): JSX.Element {
+  const [host, setHost] = useState('192.168.66.201');
+  const [port, setPort] = useState('44544');
+  const [name, setName] = useState('');
+  const [pass, setPass] = useState('');
+
+  const submit = (mode: 'login' | 'register') => {
+    const p = parseInt(port, 10);
+    if (!host || !p || !name || !pass) {
+      return;
+    }
+    void onAuthenticate(host, p, mode, name, pass);
+  };
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.brand}>Horizon</Text>
+      <Text style={styles.subtitle}>深空矩阵新视野 · 移动端</Text>
+
+      <Text style={styles.label}>后端地址</Text>
+      <View style={styles.row}>
+        <TextInput
+          style={[styles.input, styles.hostInput]}
+          value={host}
+          onChangeText={setHost}
+          placeholder="192.168.x.x"
+          placeholderTextColor="#5A6B8C"
+          autoCapitalize="none"
+          editable={!busy}
+        />
+        <TextInput
+          style={styles.portInput}
+          value={port}
+          onChangeText={setPort}
+          keyboardType="number-pad"
+          editable={!busy}
+        />
+      </View>
+
+      <Text style={styles.label}>账号</Text>
+      <TextInput
+        style={styles.input}
+        value={name}
+        onChangeText={setName}
+        autoCapitalize="none"
+        editable={!busy}
+      />
+
+      <Text style={styles.label}>密码</Text>
+      <TextInput
+        style={styles.input}
+        value={pass}
+        onChangeText={setPass}
+        secureTextEntry
+        editable={!busy}
+      />
+
+      {error !== '' && <Text style={styles.error}>{error}</Text>}
+
+      <Pressable style={[styles.btn, styles.primary, busy && styles.disabled]}
+        disabled={busy} onPress={() => submit('login')}>
+        <Text style={styles.btnText}>登录</Text>
+      </Pressable>
+      <Pressable style={[styles.btn, styles.secondary, busy && styles.disabled]}
+        disabled={busy} onPress={() => submit('register')}>
+        <Text style={[styles.btnText, styles.secondaryText]}>注册新账号</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: { width: '100%', maxWidth: 420, alignSelf: 'center' },
+  brand: { color: '#E8EEF9', fontSize: 34, fontWeight: '700', letterSpacing: 2 },
+  subtitle: { color: '#5A6B8C', fontSize: 13, marginBottom: 28 },
+  label: { color: '#8FA3C7', fontSize: 12, marginTop: 14, marginBottom: 6 },
+  row: { flexDirection: 'row', gap: 8 },
+  input: {
+    flex: 1,
+    backgroundColor: '#16203A',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#E8EEF9',
+    fontSize: 15,
+  },
+  hostInput: {},
+  portInput: {
+    width: 90,
+    backgroundColor: '#16203A',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: '#E8EEF9',
+    fontSize: 15,
+  },
+  error: { color: '#E46A6A', fontSize: 13, marginTop: 12 },
+  btn: {
+    borderRadius: 8,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  primary: { backgroundColor: '#2E6BE6' },
+  secondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#2E6BE6' },
+  disabled: { opacity: 0.5 },
+  btnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  secondaryText: { color: '#6E9BF0' },
+});
