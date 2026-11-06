@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors } from '../ui/theme';
+import { colors } from './theme';
 import { loadLastConn } from './lastConn';
 
 export interface LoginScreenProps {

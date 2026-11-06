@@ -9,7 +9,7 @@ exports.AboutScreen = AboutScreen;
  */
 const react_1 = __importDefault(require("react"));
 const react_native_1 = require("react-native");
-const theme_1 = require("../ui/theme");
+const theme_1 = require("./theme");
 function AboutScreen() {
     return (<react_native_1.View style={styles.card}>
       <react_native_1.Text style={styles.brand}>Horizon</react_native_1.Text>

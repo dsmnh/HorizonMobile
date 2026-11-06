@@ -41,7 +41,7 @@ exports.BindScreen = BindScreen;
  */
 const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
-const theme_1 = require("../ui/theme");
+const theme_1 = require("./theme");
 function BindScreen({ conn, onBound }) {
     const [code, setCode] = (0, react_1.useState)('');
     const [busy, setBusy] = (0, react_1.useState)(false);

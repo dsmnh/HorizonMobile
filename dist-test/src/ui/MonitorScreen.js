@@ -41,7 +41,7 @@ exports.MonitorScreen = MonitorScreen;
  */
 const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
-const theme_1 = require("../ui/theme");
+const theme_1 = require("./theme");
 function MonitorScreen({ conn }) {
     const [nodes, setNodes] = (0, react_1.useState)([]);
     const [error, setError] = (0, react_1.useState)('');

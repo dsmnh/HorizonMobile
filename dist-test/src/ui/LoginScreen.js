@@ -40,7 +40,7 @@ exports.LoginScreen = LoginScreen;
  */
 const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
-const theme_1 = require("../ui/theme");
+const theme_1 = require("./theme");
 const lastConn_1 = require("./lastConn");
 function LoginScreen({ onAuthenticate, busy, error }) {
     const [host, setHost] = (0, react_1.useState)('');

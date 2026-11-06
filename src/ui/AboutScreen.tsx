@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { colors } from '../ui/theme';
+import { colors } from './theme';
 
 export function AboutScreen(): JSX.Element {
   return (

@@ -80,6 +80,11 @@ async function main() {
         more: false,
     }));
     backend.handlers.set('chat.public.send', () => ({ ts: 2, mid: 2 }));
+    backend.handlers.set('chat.private.send', () => ({ ts: 3, mid: 3 }));
+    backend.handlers.set('friend.request', () => ({ requestId: 5, expiresAt: 99 }));
+    backend.handlers.set('friend.accept', () => ({}));
+    backend.handlers.set('friend.remove', () => ({}));
+    backend.handlers.set('block.set', () => ({}));
     backend.handlers.set('team.leave', () => ({}));
     backend.handlers.set('team.disband', () => ({}));
     backend.handlers.set('team.info', () => ({ team: { teamId: 42, name: 'mock队', joinMode: 'open', members: [{ uuid: 'uuid-a', role: 'leader' }, { uuid: 'uuid-b', role: 'member' }] } }));
@@ -166,6 +171,33 @@ async function main() {
         const xfer = await conn.req('team.transfer', { uuid: 'uuid-a', target: 'uuid-b' });
         step('成员与审批 roundtrip', membersOk && inv.ok && acc.ok && dec.ok && app.ok && appr.ok && deny.ok && kick.ok && role.ok && xfer.ok, `info=${membersOk} inv=${inv.b?.inviteId} acc=${acc.ok} dec=${dec.ok} app=${app.b?.applyId} appr=${appr.ok} deny=${deny.ok} kick=${kick.ok} role=${role.ok} xfer=${xfer.ok}`);
         conn.close();
+    }
+    // 10) 私聊双向回显 + 好友/屏蔽 roundtrip
+    {
+        const connA = new conn_1.HorizonConn(new transport_node_1.NodeTransport(), { host: '127.0.0.1', port, token: backend.token });
+        const connB = new conn_1.HorizonConn(new transport_node_1.NodeTransport(), { host: '127.0.0.1', port, token: backend.token });
+        await connA.start();
+        await connB.start();
+        const chatA = connA.subscribeStream('chat', { uuid: 'uuid-a' });
+        const chatB = connB.subscribeStream('chat', { uuid: 'uuid-b' });
+        await waitFor(() => chatA.streamId >= 0 && chatB.streamId >= 0, 2000);
+        let gotA = null;
+        let gotB = null;
+        chatA.addEventListener((e) => { gotA = e; });
+        chatB.addEventListener((e) => { gotB = e; });
+        const send = await connA.req('chat.private.send', { uuid: 'uuid-a', to: 'uuid-b', text: 'psst' });
+        await waitFor(() => gotA !== null && gotB !== null, 2000);
+        const bothGot = gotA?.text === 'psst' && gotB?.text === 'psst' && gotA?.scope === 'private' && gotB?.scope === 'private';
+        const fr = await connA.req('friend.request', { uuid: 'uuid-a', to: 'uuid-b' });
+        const fa = await connB.req('friend.accept', { uuid: 'uuid-b', requestId: fr.b?.requestId });
+        const frm = await connA.req('friend.remove', { uuid: 'uuid-a', target: 'uuid-b' });
+        const bl = await connA.req('block.set', { uuid: 'uuid-a', target: 'uuid-b', blocked: true });
+        const ub = await connA.req('block.set', { uuid: 'uuid-a', target: 'uuid-b', blocked: false });
+        step('私聊双向回显 + 好友/屏蔽 roundtrip', send.ok && bothGot && fr.ok && fa.ok && frm.ok && bl.ok && ub.ok, `send=${send.ok} both=${bothGot} fr=${fr.b?.requestId} acc=${fa.ok} rm=${frm.ok} block=${bl.ok}/${ub.ok}`);
+        chatA.close();
+        chatB.close();
+        connA.close();
+        connB.close();
     }
     backend.close();
     let failed = 0;

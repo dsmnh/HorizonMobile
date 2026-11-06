@@ -153,24 +153,28 @@ class MockAppBackend {
                     if (b === undefined)
                         continue; // 不回包（超时用例）
                     write(jsonFrame(0x11, { id: body.id, ok: true, b }));
-                    // chat.*.send 成功后把消息回显进发送者（及私聊对端）的 chat 流（契约 1.4.0 定向投递）
+                    // chat.*.send 成功后把消息回显进相关 chat 流（契约 1.4.0 定向投递）：
+                    // public → 发送者；private → 发送者与对端各一份
                     if (b && b.ts && body.op.endsWith('.send')) {
+                        const sender = (body.p ?? {}).uuid ?? '';
+                        const peer = (body.p ?? {}).to ?? '';
                         const msg = {
                             t: 'd',
                             boot: 1,
                             seq: Date.now(),
                             ts: b.ts,
-                            uuid: (body.p ?? {}).uuid ?? '',
+                            uuid: sender,
                             events: [{
                                     k: 'msg',
                                     mid: b.mid ?? Date.now(),
-                                    from: (body.p ?? {}).uuid ?? '',
+                                    from: sender,
+                                    to: peer,
                                     scope: body.op.includes('private') ? 'private' : 'public',
                                     text: (body.p ?? {}).text ?? '',
                                 }],
                         };
-                        const p1 = (body.p ?? {}).uuid;
-                        const targets = this.activeStreams.filter((st) => st.op === 'chat' && st.uuid === p1);
+                        const targets = this.activeStreams.filter((st) => st.op === 'chat'
+                            && (body.op.includes('private') ? st.uuid === sender || st.uuid === peer : st.uuid === sender));
                         for (const st of targets) {
                             st.write(jsonFrame(0x22, { s: st.id, f: msg }));
                         }

@@ -6,7 +6,7 @@
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors } from '../ui/theme';
+import { colors } from './theme';
 import { HorizonConn, type Res } from '../net/conn';
 
 interface MemberRow {
