@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { type HorizonConn } from '../net/conn';
 import { TeamScreen } from './TeamScreen';
 import { ChatScreen } from './ChatScreen';
+import { TeamOpsScreen } from './TeamOpsScreen';
 import { BindScreen } from './BindScreen';
 import { MonitorScreen } from './MonitorScreen';
 
@@ -51,6 +52,7 @@ export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, o
           {conn != null && (
             <>
               <TeamScreen conn={conn} uuid={uuids[0]} />
+              <TeamOpsScreen conn={conn} uuid={uuids[0]} onChanged={() => undefined} />
               <ChatScreen conn={conn} uuid={uuids[0]} />
             </>
           )}

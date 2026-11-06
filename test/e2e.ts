@@ -89,6 +89,11 @@ async function main(): Promise<void> {
   }));
   backend.handlers.set('chat.public.send', () => ({ ts: 2, mid: 2 }));
 
+  backend.handlers.set('team.leave', () => ({}));
+  backend.handlers.set('team.disband', () => ({}));
+  backend.handlers.set('team.info', () => ({ teamId: 1, name: 'mock队', members: [] }));
+  backend.handlers.set('team.joinmode', () => ({}));
+
   // 5) 错误传播
   {
     backend.clockFails = 0;
@@ -144,6 +149,20 @@ async function main(): Promise<void> {
     step('chat.public.send 回显经流送达', send.ok && event?.k === 'msg' && event?.text === 'hi' && event?.from === 'uuid-a',
       `res=${JSON.stringify(send.b)} event=${JSON.stringify(event)}`);
     chat.close();
+    conn.close();
+  }
+
+  // 8) 队伍操作 roundtrip：create → info → joinmode → disband（mock 脚本化）
+  {
+    const conn = new HorizonConn(new NodeTransport(), { host: '127.0.0.1', port, token: backend.token });
+    await conn.start();
+    const created = await conn.req('team.create', { uuid: 'uuid-a', name: 'op队' });
+    const info = await conn.req('team.info', { uuid: 'uuid-a' });
+    const mode = await conn.req('team.joinmode', { uuid: 'uuid-a', mode: 'open' });
+    const disband = await conn.req('team.disband', { uuid: 'uuid-a' });
+    step('队伍操作 roundtrip',
+      created.ok && created.b?.teamId === 42 && info.ok && mode.ok && disband.ok,
+      `create=${created.b?.teamId} info=${info.ok} mode=${mode.ok} disband=${disband.ok}`);
     conn.close();
   }
 
