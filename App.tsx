@@ -86,6 +86,7 @@ export default function App(): JSX.Element {
             connected={connected}
             uuids={uuids}
             conn={conn}
+            onUuidsChanged={setUuids}
             onDisconnect={disconnect}
           />
         )}

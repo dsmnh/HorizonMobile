@@ -7,6 +7,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { type HorizonConn } from '../net/conn';
 import { TeamScreen } from './TeamScreen';
 import { ChatScreen } from './ChatScreen';
+import { BindScreen } from './BindScreen';
+import { MonitorScreen } from './MonitorScreen';
 
 export interface HomeScreenProps {
   host: string;
@@ -15,9 +17,10 @@ export interface HomeScreenProps {
   uuids: string[];
   conn: HorizonConn | null;
   onDisconnect: () => void;
+  onUuidsChanged: (uuids: string[]) => void;
 }
 
-export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect }: HomeScreenProps): JSX.Element {
+export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, onUuidsChanged }: HomeScreenProps): JSX.Element {
   return (
     <View style={styles.card}>
       <Text style={styles.brand}>Horizon</Text>
@@ -30,9 +33,14 @@ export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect }:
 
       <Text style={styles.label}>绑定 UUID</Text>
       {uuids.length === 0 ? (
-        <Text style={styles.empty}>
-          暂无绑定。进游戏执行 /dsmnhmobile bind 获取绑定码后添加（绑定管理屏随迁移增量接入）。
-        </Text>
+        conn != null && (
+          <BindScreen
+            conn={conn}
+            onBound={(list) => {
+              if (list.length > 0) onUuidsChanged(list);
+            }}
+          />
+        )
       ) : (
         <View>
           {uuids.map((u) => (
@@ -48,6 +56,8 @@ export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect }:
           )}
         </View>
       )}
+
+      {conn != null && <MonitorScreen conn={conn} />}
 
       <Pressable style={styles.btn} onPress={onDisconnect}>
         <Text style={styles.btnText}>断开连接</Text>

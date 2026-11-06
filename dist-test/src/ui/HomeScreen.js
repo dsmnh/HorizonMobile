@@ -12,7 +12,9 @@ const react_1 = __importDefault(require("react"));
 const react_native_1 = require("react-native");
 const TeamScreen_1 = require("./TeamScreen");
 const ChatScreen_1 = require("./ChatScreen");
-function HomeScreen({ host, port, connected, uuids, conn, onDisconnect }) {
+const BindScreen_1 = require("./BindScreen");
+const MonitorScreen_1 = require("./MonitorScreen");
+function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, onUuidsChanged }) {
     return (<react_native_1.View style={styles.card}>
       <react_native_1.Text style={styles.brand}>Horizon</react_native_1.Text>
       <react_native_1.View style={styles.statusRow}>
@@ -23,9 +25,10 @@ function HomeScreen({ host, port, connected, uuids, conn, onDisconnect }) {
       </react_native_1.View>
 
       <react_native_1.Text style={styles.label}>绑定 UUID</react_native_1.Text>
-      {uuids.length === 0 ? (<react_native_1.Text style={styles.empty}>
-          暂无绑定。进游戏执行 /dsmnhmobile bind 获取绑定码后添加（绑定管理屏随迁移增量接入）。
-        </react_native_1.Text>) : (<react_native_1.View>
+      {uuids.length === 0 ? (conn != null && (<BindScreen_1.BindScreen conn={conn} onBound={(list) => {
+                if (list.length > 0)
+                    onUuidsChanged(list);
+            }}/>)) : (<react_native_1.View>
           {uuids.map((u) => (<react_native_1.View key={u} style={styles.uuidRow}>
               <react_native_1.Text style={styles.uuidText}>{u}</react_native_1.Text>
             </react_native_1.View>))}
@@ -34,6 +37,8 @@ function HomeScreen({ host, port, connected, uuids, conn, onDisconnect }) {
               <ChatScreen_1.ChatScreen conn={conn} uuid={uuids[0]}/>
             </>)}
         </react_native_1.View>)}
+
+      {conn != null && <MonitorScreen_1.MonitorScreen conn={conn}/>}
 
       <react_native_1.Pressable style={styles.btn} onPress={onDisconnect}>
         <react_native_1.Text style={styles.btnText}>断开连接</react_native_1.Text>
