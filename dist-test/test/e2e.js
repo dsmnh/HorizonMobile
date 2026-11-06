@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-/** e2e 对拍：HorizonConn（node 传输）↔ mock/server.mjs，覆盖契约 1.2.0 App 平面核心行为。 */
+/** e2e 对拍：HorizonConn（node 传输）↔ mock/server.cjs，覆盖契约 1.2.0 App 平面核心行为。 */
 const node_assert_1 = require("node:assert");
 const server_cjs_1 = require("../mock/server.cjs");
 const conn_1 = require("../src/net/conn");
@@ -9,12 +9,19 @@ process.on('unhandledRejection', (reason) => {
     // 迟到的断连 reject（旧连接的 pending）不视为测试失败，记录即可
     console.log('[skip] unhandled rejection logged');
 });
+/** 全局看门狗：任一场景卡死立即退出并给出定位，杜绝无限等待。 */
+const watchdog = setTimeout(() => {
+    console.error('== e2e 看门狗超时（60s）：场景卡死 ==');
+    process.exit(2);
+}, 60000);
+watchdog.unref?.();
 async function main() {
     const backend = new server_cjs_1.MockAppBackend();
     const port = await backend.listen();
     const results = [];
     const step = (name, pass, detail) => {
         results.push(`${pass ? 'PASS' : 'FAIL'}  ${name}  ｜ ${detail}`);
+        console.log(results[results.length - 1]);
     };
     // 账号域脚本
     backend.handlers.set('account.register', () => ({ token: backend.token, kid: backend.token.substring(0, 8), uuids: [] }));
@@ -30,34 +37,30 @@ async function main() {
         // 2) team 流：订阅与事件
         let got = null;
         const stream = conn.subscribeTeam('uuid-a');
-        await sleep(150);
+        await waitFor(() => stream.streamId >= 0, 2000);
         stream.addEventListener((e) => {
             got = e;
         });
-        // mock 的 pushEvent 钩子：每次 SUB 后由测试注入
-        backend.pushEvent = (streamId, write) => {
-            backend.pushTeamEvent(streamId, write, { seq: 1, k: 'inviteReceived', from: 'uuid-x', teamId: 42, expiresAt: 1 });
-        };
-        // 重新订阅一次触发注入（简化：直接再发一条 SUB）
-        const stream2 = conn.subscribeTeam('uuid-a');
-        await sleep(200);
+        backend.pushLastTeamEvent({ seq: 1, k: 'inviteReceived', from: 'uuid-x', teamId: 42, expiresAt: 1 });
+        await waitFor(() => got !== null, 2000);
         step('team 流事件送达', got !== null && got.k === 'inviteReceived', JSON.stringify(got));
         stream.close();
-        stream2.close();
         conn.close();
     }
-    // 3) 断线自动重连 + 重订阅
+    // 3) 断线自动重连 + 重订阅（真断线：订阅建立后断开，退避重连后补订）
     {
-        backend.dropAfterAuth = true;
         const conn = new conn_1.HorizonConn(new transport_node_1.NodeTransport(), { host: '127.0.0.1', port, token: backend.token });
-        // 首次连接因 dropAfterAuth 立即断开：start 的重试循环会持续重连
-        // 关掉 drop 让重连成功
-        const t = setTimeout(() => {
-            backend.dropAfterAuth = false;
-        }, 1500);
         await conn.start();
-        clearTimeout(t);
-        step('断线后自动重连并重新订阅', conn.isConnected, `subs=${backend.subscribed}`);
+        const stream = conn.subscribeTeam('uuid-a');
+        await waitFor(() => stream.streamId >= 0, 2000);
+        const sidBefore = stream.sid;
+        // 断开现役连接（模拟服务端踢线）；流登记随连接关闭自动清理
+        backend.kickAll();
+        // 等待重连：退避 1s + 握手，5s 内应恢复
+        await waitFor(() => conn.isConnected, 5000);
+        await waitFor(() => stream.streamId >= 0 && stream.sid !== sidBefore, 3000);
+        step('断线后自动重连并重新订阅', conn.isConnected && stream.sid !== sidBefore && backend.activeStreams.length >= 1, `subs=${backend.activeStreams.length} sidChanged=${stream.sid !== sidBefore}`);
+        stream.close();
         conn.close();
     }
     // 4) CLOCK 偏差自动重签
@@ -81,12 +84,20 @@ async function main() {
     backend.close();
     let failed = 0;
     for (const line of results) {
-        console.log(line);
         if (line.startsWith('FAIL'))
             failed += 1;
     }
     console.log(failed === 0 ? '== e2e 全部通过 ==' : `== e2e 失败 ${failed} 项 ==`);
     process.exit(failed === 0 ? 0 : 1);
+}
+/** 轮询等待条件成立；超时抛错（由看门狗兜底退出）。 */
+async function waitFor(cond, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (!cond()) {
+        if (Date.now() > deadline)
+            throw new Error(`waitFor 超时（${timeoutMs}ms）`);
+        await sleep(25);
+    }
 }
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));

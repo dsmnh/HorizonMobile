@@ -2,9 +2,14 @@
  * App 平面多路复用连接（契约 1.2.0）：HELLO → AUTH（会话 token，HMAC）→ ACTIVE。
  * 一条 TCP 连接多路复用 REQ/SUB；断线指数退避重连（1s→15s），重连后带 sid 重新订阅。
  * 传输经 Transport 注入：测试/mock 用 node:net，RN 运行时注入 react-native-tcp-socket 适配器。
+ *
+ * 并发纪律（e2e 重连风暴教训）：
+ * - 数据泵全局唯一：start() 注册一次，永不替换；握手读帧走同一泵的一次性 waiter。
+ * - 重连单飞：reconnecting 标志合并多次断连事件，任何时刻至多一个重连循环。
+ * - PING 定时器随连接生灭：断连/关闭先 clear，杜绝旧定时器向新连接写帧。
  */
 import { Frame, PROTOCOL_VERSION, T, encodeFrame, jsonFrame } from './protocol';
-import { CLOCK_SKEW_SEC, kidOf, sign } from './auth';
+import { kidOf, sign } from './auth';
 
 export interface Transport {
   connect(host: string, port: number): Promise<void>;
@@ -97,8 +102,14 @@ export class HorizonConn {
   private authed = false;
   private nonce = '';
   private clockOffset = 0;
-  private state: 'idle' | 'connecting' | 'auth' | 'active' = 'idle';
   private failCount = 0;
+  /** 握手期一次性读帧 waiter；ACTIVE 期为 null，帧全部走 onFrame 分发。 */
+  private handshakeWaiter: ((f: Frame) => void) | null = null;
+  /** 重连单飞标志：onDisconnected 可能被多次触发，只放行第一个。 */
+  private reconnecting = false;
+  /** 当前连接的 PING 定时器；断连即清。 */
+  private pingTimer: any = null;
+  private pumpInstalled = false;
 
   constructor(transport: Transport, opts: ConnOptions) {
     this.transport = transport;
@@ -119,133 +130,25 @@ export class HorizonConn {
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
-    this.transport.onData((chunk) => this.onData(chunk));
-    this.transport.onClose(() => this.onDisconnected(false));
-    await this.connectLoopFirst();
-  }
-
-  private async connectLoopFirst(): Promise<void> {
-    // 首次连接：失败按退避重试（终止性错误向上抛）
+    if (!this.pumpInstalled) {
+      this.transport.onData((chunk) => this.pump(chunk));
+      this.transport.onClose(() => this.onDisconnected());
+      this.pumpInstalled = true;
+    }
     let backoff = this.opts.backoffInitialMs!;
-    while (true) {
+    while (this.running) {
       try {
         await this.handshakeAndAuth();
         this.authed = true;
+        this.failCount = 0;
         await this.resubscribeAll();
         return;
       } catch (e: any) {
-        if (e.terminal) {
-          this.running = false;
-          throw e;
-        }
+        if (e.terminal || !this.running) throw e;
         await sleep(backoff);
         backoff = Math.min(backoff * 2, this.opts.backoffMaxMs!);
       }
     }
-  }
-
-  private scheduleReconnect(): void {
-    if (!this.running) return;
-    this.authed = false;
-    let backoff = this.opts.backoffInitialMs!;
-    const attempt = async (): Promise<void> => {
-      while (this.running) {
-        try {
-          await this.handshakeAndAuth();
-          this.authed = true;
-          await this.resubscribeAll();
-          return;
-        } catch (e: any) {
-          if (e.terminal) {
-            this.running = false;
-            this.authed = false;
-            return;
-          }
-          await sleep(backoff);
-          backoff = Math.min(backoff * 2, this.opts.backoffMaxMs!);
-        }
-      }
-    };
-    void attempt();
-  }
-
-  private async handshakeAndAuth(): Promise<void> {
-    this.state = 'connecting';
-    await this.transport.connect(this.opts.host, this.opts.port);
-    this.state = 'auth';
-
-    // HELLO
-    this.nonce = '';
-    const ack = await this.expectFrame(
-      jsonFrame(T.HELLO, {
-        v: PROTOCOL_VERSION,
-        app: this.opts.app,
-        plane: 'app',
-      }),
-      [T.HELLO_ACK, T.ERR],
-    );
-    if (ack.frame.type === T.ERR) {
-      throw terminal(jsonBody(ack.frame).m ?? 'ERR');
-    }
-    const body = jsonBody(ack.frame);
-    if (body.v !== PROTOCOL_VERSION) {
-      throw terminal(`VERSION_MISMATCH:server=${body.v}`);
-    }
-    this.nonce = body.nonce;
-    this.clockOffset = body.time - nowSec();
-
-    // AUTH（token 不上网线；CLOCK 自动重签一次）
-    await this.authOnce();
-
-    // 握手结束：恢复主数据泵（expectFrame 期间临时接管过）
-    this.transport.onData((chunk) => this.onData(chunk));
-    // PING 保活
-    const ping = setInterval(() => {
-      try {
-        this.transport.write(encodeFrame(T.PING));
-      } catch {
-        clearInterval(ping);
-      }
-    }, 20_000);
-  }
-
-  private async authOnce(): Promise<void> {
-    const ts = nowSec() + this.clockOffset;
-    const sig = sign(this.opts.token, ts, this.nonce);
-    const reply = await this.expectFrame(
-      jsonFrame(T.AUTH, { kid: kidOf(this.opts.token), ts, sig }),
-      [T.AUTH_OK, T.AUTH_FAIL],
-    );
-    if (reply.frame.type === T.AUTH_FAIL) {
-      const body = jsonBody(reply.frame);
-      const code = body.code ?? 'AUTH_FAILED';
-      if (code === 'CLOCK') {
-        const serverTime = body.time ?? 0;
-        if (serverTime > 0) this.clockOffset = serverTime - nowSec();
-        // 按 §4.2 重签一次
-        const ts2 = nowSec() + this.clockOffset;
-        const retry = await this.expectFrame(
-          jsonFrame(T.AUTH, {
-            kid: kidOf(this.opts.token),
-            ts: ts2,
-            sig: sign(this.opts.token, ts2, this.nonce),
-          }),
-          [T.AUTH_OK, T.AUTH_FAIL],
-        );
-        if (retry.frame.type === T.AUTH_FAIL) {
-          throw terminal(jsonBody(retry.frame).code ?? 'AUTH_FAILED');
-        }
-        this.restorePump();
-        return;
-      }
-      throw terminal(code);
-    }
-    this.restorePump();
-  }
-
-  /** expectFrame 临时接管过 onData；每次握手帧读取后恢复主泵。 */
-  private restorePump(): void {
-    this.transport.onData((chunk) => this.onData(chunk));
   }
 
   /** 发送请求；断线期间 reject。 */
@@ -263,27 +166,32 @@ export class HorizonConn {
     return promise;
   }
 
-  /** 订阅 team 流（1.0 的 App 平面仅登记该流）。 */
-  subscribeTeam(uuid: string): Stream {
-    const stream = new Stream('team');
+  /** 订阅任意流（通用入口）；返回 Stream，streamId 由 SUB_OK 异步回填。 */
+  subscribeStream(op: string, p: any = {}): Stream {
+    const stream = new Stream(op);
     stream.connRef = this;
     this.streams.push(stream);
     if (this.authed) {
-      this.rawSub(stream, { uuid }).catch(() => {
+      this.rawSub(stream, p).catch(() => {
         // 订阅失败留待重连时补订
       });
     }
     return stream;
   }
 
+  /** 订阅 team 流（1.0 的 App 平面仅登记该流）。 */
+  subscribeTeam(uuid: string): Stream {
+    return this.subscribeStream('team', { uuid });
+  }
+
   private async rawSub(stream: Stream, p: any, sid?: string): Promise<void> {
+    if (!this.authed) return; // 断连中的补订请求直接放弃，重连循环会接管
     stream.lastParams = p;
     const id = ++this.nextId;
     const frame: any = { id, op: stream.op, p };
     if (sid) frame.sid = sid;
     this.transport.write(jsonFrame(T.SUB, frame));
-    // SUB_OK 由帧分发器按 id 完成；这里仅登记映射。
-    // 断连时 pending 被 reject——订阅重订由重连循环接管，此处吞掉拒绝避免未捕获崩溃。
+    // SUB_OK 由帧分发器按 id 完成；断连时 pending 被 reject，这里吞掉避免未捕获崩溃。
     const promise = new Promise<Res>((resolve) => {
       const timer = setTimeout(() => this.pending.delete(id), this.opts.requestTimeoutMs);
       this.pending.set(id, {
@@ -302,7 +210,7 @@ export class HorizonConn {
 
   /** @internal */
   unsub(streamId: number): void {
-    if (streamId < 0) return;
+    if (streamId < 0 || !this.authed) return;
     const frame: any = { s: streamId };
     this.transport.write(jsonFrame(T.UNSUB, frame));
   }
@@ -310,6 +218,7 @@ export class HorizonConn {
   close(): void {
     this.running = false;
     this.authed = false;
+    this.stopPing();
     this.transport.close();
     for (const [, p] of this.pending) {
       clearTimeout(p.timer);
@@ -318,9 +227,135 @@ export class HorizonConn {
     this.pending.clear();
   }
 
-  // ---------- 帧分发 ----------
+  // ---------- 连接生命周期 ----------
 
-  private onData(chunk: Buffer): void {
+  private async handshakeAndAuth(): Promise<void> {
+    await this.transport.connect(this.opts.host, this.opts.port);
+    // 握手期无并发帧（服务端只回应答），一次性 waiter 从公共泵取帧
+    const ack = await this.expectFrame(
+      jsonFrame(T.HELLO, {
+        v: PROTOCOL_VERSION,
+        app: this.opts.app,
+        plane: 'app',
+      }),
+    );
+    if (ack.type === T.ERR) {
+      throw terminal(jsonBody(ack).m ?? 'ERR');
+    }
+    const body = jsonBody(ack);
+    if (body.v !== PROTOCOL_VERSION) {
+      throw terminal(`VERSION_MISMATCH:server=${body.v}`);
+    }
+    this.nonce = body.nonce;
+    this.clockOffset = body.time - nowSec();
+    await this.authOnce();
+    this.startPing();
+  }
+
+  private async authOnce(): Promise<void> {
+    const ts = nowSec() + this.clockOffset;
+    const sig = sign(this.opts.token, ts, this.nonce);
+    const reply = await this.expectFrame(
+      jsonFrame(T.AUTH, { kid: kidOf(this.opts.token), ts, sig }),
+    );
+    if (reply.type === T.AUTH_FAIL) {
+      const body = jsonBody(reply);
+      const code = body.code ?? 'AUTH_FAILED';
+      if (code === 'CLOCK') {
+        const serverTime = body.time ?? 0;
+        if (serverTime > 0) this.clockOffset = serverTime - nowSec();
+        // 按 §4.2 重签一次
+        const ts2 = nowSec() + this.clockOffset;
+        const retry = await this.expectFrame(
+          jsonFrame(T.AUTH, {
+            kid: kidOf(this.opts.token),
+            ts: ts2,
+            sig: sign(this.opts.token, ts2, this.nonce),
+          }),
+        );
+        if (retry.type === T.AUTH_FAIL) {
+          throw terminal(jsonBody(retry).code ?? 'AUTH_FAILED');
+        }
+        return;
+      }
+      throw terminal(code);
+    }
+  }
+
+  private startPing(): void {
+    this.stopPing();
+    this.pingTimer = setInterval(() => {
+      if (!this.authed) {
+        this.stopPing();
+        return;
+      }
+      try {
+        this.transport.write(encodeFrame(T.PING));
+      } catch {
+        this.stopPing();
+      }
+    }, 20_000);
+  }
+
+  private stopPing(): void {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+  }
+
+  private async resubscribeAll(): Promise<void> {
+    for (const stream of this.streams) {
+      if (!this.authed) return; // 重订途中断线：交给重连循环
+      try {
+        await this.rawSub(stream, stream.lastParams ?? {}, stream.sid || undefined);
+      } catch {
+        // 单个流重订失败不阻断整体重连；该流由后续重连继续补订
+      }
+    }
+  }
+
+  /** 断连统一入口（传输 close 触发）；pending 清算 + 单飞重连。 */
+  private onDisconnected(): void {
+    const wasAuthed = this.authed;
+    this.authed = false;
+    this.stopPing();
+    for (const [, p] of this.pending) {
+      clearTimeout(p.timer);
+      p.reject(new Error('连接断开'));
+    }
+    this.pending.clear();
+    if (!this.running || this.reconnecting) return;
+    if (!wasAuthed) return; // 首连循环尚未结束，由 start 的循环负责重试
+    this.reconnecting = true;
+    void this.reconnectLoop();
+  }
+
+  private async reconnectLoop(): Promise<void> {
+    let backoff = this.opts.backoffInitialMs!;
+    while (this.running && !this.authed) {
+      try {
+        await this.handshakeAndAuth();
+        this.authed = true;
+        this.reconnecting = false;
+        await this.resubscribeAll();
+        return;
+      } catch (e: any) {
+        if (e.terminal || !this.running) {
+          this.reconnecting = false;
+          return;
+        }
+        await sleep(backoff);
+        backoff = Math.min(backoff * 2, this.opts.backoffMaxMs!);
+      }
+    }
+    this.reconnecting = false;
+  }
+
+  // ---------- 帧泵与分发 ----------
+
+  /** 全局唯一数据泵：握手帧交给 waiter，其余帧走分发。 */
+  private pump(chunk: Buffer): void {
     this.buffer = Buffer.concat([this.buffer, chunk]);
     for (;;) {
       if (this.buffer.length < 4) return;
@@ -333,8 +368,29 @@ export class HorizonConn {
       const raw = this.buffer.subarray(4, 4 + 2 + len);
       this.buffer = this.buffer.subarray(4 + 2 + len);
       const frame: Frame = { type: raw[0], flags: raw[1], payload: raw.subarray(2) };
-      this.onFrame(frame);
+      if (this.handshakeWaiter) {
+        const deliver = this.handshakeWaiter;
+        this.handshakeWaiter = null;
+        deliver(frame);
+      } else {
+        this.onFrame(frame);
+      }
     }
+  }
+
+  /** 读一帧的握手专用路径：写帧后挂一次性 waiter，由公共泵投递。 */
+  private expectFrame(writeFrame: Buffer): Promise<Frame> {
+    this.transport.write(writeFrame);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.handshakeWaiter = null;
+        reject(new Error('握手超时'));
+      }, 15_000);
+      this.handshakeWaiter = (f: Frame) => {
+        clearTimeout(timer);
+        resolve(f);
+      };
+    });
   }
 
   private onFrame(frame: Frame): void {
@@ -360,10 +416,9 @@ export class HorizonConn {
         return;
       }
       case T.PUSH: {
-        const f = jsonBody(frame).f;
-        const s = jsonBody(frame).s;
+        const body = jsonBody(frame);
         for (const stream of this.streams) {
-          if (stream.streamId === s) stream.emit(f);
+          if (stream.streamId === body.s) stream.emit(body.f);
         }
         return;
       }
@@ -382,54 +437,6 @@ export class HorizonConn {
       default:
         return;
     }
-  }
-
-  /** 读一帧的简易路径：仅握手期使用（之后进入连续缓冲分发）。 */
-  private expectFrame(writeFrame: Buffer, _accept: number[]): Promise<{ frame: Frame }> {
-    this.transport.write(writeFrame);
-    // 握手期帧序：直接从缓冲读；为保持实现简单，握手期不并发其他帧
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('握手超时')), 15_000);
-      const tryParse = (): void => {
-        void 0;
-        if (this.buffer.length < 4) return;
-        const len = this.buffer.readUInt32BE(0);
-        if (this.buffer.length < 4 + len) return;
-        const raw = this.buffer.subarray(4, 4 + 2 + len);
-        this.buffer = this.buffer.subarray(4 + 2 + len);
-        clearTimeout(timer);
-        resolve({ frame: { type: raw[0], flags: raw[1], payload: raw.subarray(2) } });
-      };
-      const prev = this.onData;
-      // 握手期接管数据泵（此时无并发帧）
-      this.transport.onData((chunk: Buffer) => {
-        this.buffer = Buffer.concat([this.buffer, chunk]);
-        tryParse();
-      });
-      void prev;
-      tryParse();
-    });
-  }
-
-  private async resubscribeAll(): Promise<void> {
-    for (const stream of this.streams) {
-      try {
-        await this.rawSub(stream, stream.lastParams ?? {}, stream.sid || undefined);
-      } catch {
-        // 单个流重订失败不阻断整体重连；该流由后续重连继续补订
-      }
-    }
-  }
-
-  private onDisconnected(_grace: boolean): void {
-    if (!this.running) return;
-    this.authed = false;
-    for (const [, p] of this.pending) {
-      clearTimeout(p.timer);
-      p.reject(new Error('连接断开'));
-    }
-    this.pending.clear();
-    this.scheduleReconnect();
   }
 }
 

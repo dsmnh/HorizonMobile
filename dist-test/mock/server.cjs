@@ -22,7 +22,14 @@ class MockAppBackend {
         this.lastSubSid = null;
         this.authCount = 0;
         this.server = null;
-        this.pushEvent = null; // (streamId, write) => void
+        this.activeStreams = []; // { id, write }，按连接登记；断开时清理
+        this.sockets = new Set(); // 现役连接句柄（kickAll 用）
+    }
+    /** 踢掉全部现役连接（模拟服务端断线）。 */
+    kickAll() {
+        for (const s of this.sockets) {
+            s.destroy();
+        }
     }
     listen() {
         return new Promise((resolve) => {
@@ -39,7 +46,12 @@ class MockAppBackend {
         let nonce = null;
         let authed = false;
         let streamId = 0;
-        this.subscribed += 0;
+        this.sockets.add(socket);
+        socket.on('close', () => {
+            this.sockets.delete(socket);
+            // 清理本连接登记的流（按 write 闭包归属：连接关闭后 write 不再可用）
+            this.activeStreams = this.activeStreams.filter((st) => st.socket === socket);
+        });
         const write = (frame) => {
             if (!socket.destroyed && socket.writable)
                 socket.write(frame);
@@ -81,9 +93,6 @@ class MockAppBackend {
                 if (type === 0x03) {
                     // AUTH
                     this.authCount += 1;
-                    console.log("[mock] AUTH收到 rejectAuth=", this.rejectAuth, "kid=", body.kid, "ts=", body.ts);
-                    this.authCount += 1;
-                    console.log("[mock] body=" + JSON.stringify(body) + " now=" + Math.floor(Date.now() / 1000));
                     const now = Math.floor(Date.now() / 1000);
                     if (Math.abs(now - body.ts) > 600) {
                         write(jsonFrame(0x05, { code: 'CLOCK', time: now }));
@@ -102,7 +111,6 @@ class MockAppBackend {
                     const canonical = `HORIZON\n${body.ts}\n${nonce}`;
                     const expect = node_crypto_1.default.createHmac('sha256', this.token).update(canonical).digest('base64url');
                     if (body.sig !== expect) {
-                        console.log("[mock] sig mismatch:", body.sig, "vs", expect, "nonce=", nonce, "ts=", body.ts);
                         write(jsonFrame(0x05, { code: 'AUTH_FAILED', time: now }));
                         socket.end();
                         return;
@@ -121,9 +129,7 @@ class MockAppBackend {
                     const sid = b64u(node_crypto_1.default.randomBytes(8));
                     this.lastSubSid = sid;
                     write(jsonFrame(0x21, { id: body.id, s: streamId, sid }));
-                    if (this.pushEvent) {
-                        this.pushEvent(streamId, write);
-                    }
+                    this.activeStreams.push({ id: streamId, write, socket });
                     continue;
                 }
                 if (type === 0x23)
@@ -146,6 +152,13 @@ class MockAppBackend {
                 }
             }
         });
+    }
+    /** 向最新登记的订阅推送一条 team 增量事件。 */
+    pushLastTeamEvent(event) {
+        const stream = this.activeStreams[this.activeStreams.length - 1];
+        if (!stream)
+            throw new Error('mock：当前无活跃订阅');
+        this.pushTeamEvent(stream.id, stream.write, event);
     }
     /** 向当前（唯一）订阅推送一条 team 增量事件。 */
     pushTeamEvent(streamId, write, event) {
