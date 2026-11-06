@@ -4,16 +4,19 @@
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { type HorizonConn } from '../net/conn';
+import { TeamScreen } from './TeamScreen';
 
 export interface HomeScreenProps {
   host: string;
   port: number;
   connected: boolean;
   uuids: string[];
+  conn: HorizonConn | null;
   onDisconnect: () => void;
 }
 
-export function HomeScreen({ host, port, connected, uuids, onDisconnect }: HomeScreenProps): JSX.Element {
+export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect }: HomeScreenProps): JSX.Element {
   return (
     <View style={styles.card}>
       <Text style={styles.brand}>Horizon</Text>
@@ -30,11 +33,14 @@ export function HomeScreen({ host, port, connected, uuids, onDisconnect }: HomeS
           暂无绑定。进游戏执行 /dsmnhmobile bind 获取绑定码后添加（绑定管理屏随迁移增量接入）。
         </Text>
       ) : (
-        uuids.map((u) => (
-          <View key={u} style={styles.uuidRow}>
-            <Text style={styles.uuidText}>{u}</Text>
-          </View>
-        ))
+        <View>
+          {uuids.map((u) => (
+            <View key={u} style={styles.uuidRow}>
+              <Text style={styles.uuidText}>{u}</Text>
+            </View>
+          ))}
+          {conn != null && <TeamScreen conn={conn} uuid={uuids[0]} />}
+        </View>
       )}
 
       <Pressable style={styles.btn} onPress={onDisconnect}>

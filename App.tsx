@@ -85,6 +85,7 @@ export default function App(): JSX.Element {
             port={session.port}
             connected={connected}
             uuids={uuids}
+            conn={conn}
             onDisconnect={disconnect}
           />
         )}
