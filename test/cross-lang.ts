@@ -16,15 +16,15 @@ function encodeFrame(type: number, obj?: any): Buffer {
   return out;
 }
 
-/** 预鉴权 register：不经 HorizonConn（其 start 前提是已有 token），裸帧换 token。 */
-function rawRegister(port: number): Promise<string> {
+/** 预鉴权 op：不经 HorizonConn（其 start 前提是已有 token），裸帧直发。 */
+function rawPreauth(port: number, op: string, p: any): Promise<any> {
   return new Promise((resolve, reject) => {
     const socket = net.connect({ host: HOST, port });
     let buffer = Buffer.alloc(0);
     let gotNonce = false;
     const timer = setTimeout(() => {
       socket.destroy();
-      reject(new Error('rawRegister 超时'));
+      reject(new Error(`${op} 超时`));
     }, 10_000);
     socket.on('data', (chunk) => {
       buffer = Buffer.concat([buffer, chunk]);
@@ -38,18 +38,14 @@ function rawRegister(port: number): Promise<string> {
         const body = payload.length ? JSON.parse(payload.toString('utf8')) : {};
         if (type === 0x02) {
           gotNonce = true;
-          socket.write(encodeFrame(0x10, {
-            id: 1,
-            op: 'account.register',
-            p: { name: `probe-${Date.now() % 1000000}`, pass: 'probe-password-123' },
-          }));
+          socket.write(encodeFrame(0x10, { id: 1, op, p }));
         } else if (type === 0x11 && gotNonce) {
           clearTimeout(timer);
           socket.destroy();
-          if (body.ok && body.b?.token) {
-            resolve(body.b.token as string);
+          if (body.ok) {
+            resolve(body.b);
           } else {
-            reject(new Error(`register 失败：${body.m ?? JSON.stringify(body)}`));
+            reject(new Error(`${op} 失败：${body.m ?? JSON.stringify(body)}`));
           }
           return;
         }
@@ -72,7 +68,10 @@ async function main(): Promise<void> {
   };
 
   console.log(`真后端 ${HOST}:${PORT} 跨语言探针`);
-  const token = await rawRegister(PORT);
+  const name = `probe-${Date.now() % 1000000}`;
+  const pass = 'probe-password-123';
+  const reg = await rawPreauth(PORT, 'account.register', { name, pass });
+  const token: string = reg.token;
   step('预鉴权 register（裸帧 ↔ Java）', !!token, `token kid=${token.substring(0, 8)}`);
 
   const conn = new HorizonConn(new NodeTransport(), { host: HOST, port: PORT, token });
@@ -85,6 +84,23 @@ async function main(): Promise<void> {
   const create = await conn.req('team.create', { name: `探针队-${Date.now() % 100000}` });
   // 未绑定 UUID 时后端按契约拒绝（FORBIDDEN/NO_UUID），能收到结构化 RES 即证明错误路径贯通
   step('team.create 错误路径贯通', typeof create.ok === 'boolean', `ok=${create.ok} m=${create.m ?? '-'}`);
+
+  // 会话生命周期：同账号第二会话 → 列表 → 撤销另一会话 → 列表收敛
+  const login2 = await rawPreauth(PORT, 'account.login', { name, pass });
+  const token2: string = login2.token;
+  step('同账号二次 login（新会话）', !!token2 && token2 !== token, 'token 不同=会话独立');
+
+  const before = await conn.req('account.sessions');
+  const list0 = before.b?.sessions ?? [];
+  const other = list0.find((s: any) => !s.current);
+  step('account.sessions 列出双会话', before.ok && list0.length >= 2 && !!other,
+    `n=${list0.length} current 标记=${list0.filter((s: any) => s.current).length}`);
+
+  const revoke = await conn.req('account.revokeSession', { id: other.id });
+  const after = await conn.req('account.sessions');
+  const list1 = after.b?.sessions ?? [];
+  step('revokeSession 撤销另一会话后列表收敛', revoke.ok && list1.length === list0.length - 1,
+    `${list0.length} -> ${list1.length}`);
 
   conn.close();
   const failed = results.filter((r) => r.startsWith('FAIL')).length;
