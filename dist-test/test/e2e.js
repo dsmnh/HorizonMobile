@@ -221,6 +221,31 @@ async function main() {
         step('rank.sync roundtrip', sync.ok && sync.b?.queued === true, JSON.stringify(sync.b));
         conn.close();
     }
+    // 13) 重连风暴硬化：短窗内连续两次踢线，重连后仍恰好一次补订、authCount 有界
+    {
+        backend.clockFails = 0;
+        const conn = new conn_1.HorizonConn(new transport_node_1.NodeTransport(), { host: '127.0.0.1', port, token: backend.token });
+        await conn.start();
+        const authBefore = backend.authCount;
+        const stream = conn.subscribeStream('team', { uuid: 'uuid-a' });
+        await waitFor(() => stream.streamId >= 0, 2000);
+        const sid1 = stream.sid;
+        backend.kickAll();
+        await waitFor(() => conn.isConnected, 6000);
+        await waitFor(() => stream.sid !== sid1, 3000);
+        // 第一次重连完成后二次踢线：确定性验证多轮重连不循环倍增
+        const sid2 = stream.sid;
+        const authAfterFirst = backend.authCount;
+        backend.kickAll();
+        await waitFor(() => conn.isConnected, 6000);
+        await waitFor(() => stream.sid !== sid2, 3000);
+        const authDelta = backend.authCount - authBefore;
+        const authSecond = backend.authCount - authAfterFirst;
+        // 两轮各恰一次鉴权（单飞；>3 即存在循环倍增）
+        step('重连风暴硬化（两轮踢线）', authDelta === 2 && authSecond === 1 && sid1 !== sid2, `authDelta=${authDelta}（第二轮=${authSecond}，sid 两轮均变更）`);
+        stream.close();
+        conn.close();
+    }
     backend.close();
     let failed = 0;
     for (const line of results) {
