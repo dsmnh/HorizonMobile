@@ -2,7 +2,7 @@ module.exports = {
   "expo": {
     "name": "HorizonMobile",
     "slug": "HorizonMobile",
-    "version": "3.6.0",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,7 +13,7 @@ module.exports = {
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.dsmnh.mobile.app",
-      "buildNumber": "7"
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,7 +21,7 @@ module.exports = {
         "backgroundColor": "#0F162E",
       },
       "package": "com.dsmnh.mobile.app",
-      "versionCode": 43
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png"
