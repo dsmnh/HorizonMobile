@@ -12,6 +12,7 @@ import { TeamOpsScreen } from './TeamOpsScreen';
 import { TeamRosterScreen } from './TeamRosterScreen';
 import { ChatScreen } from './ChatScreen';
 import { MonitorScreen } from './MonitorScreen';
+import { MeScreen } from './MeScreen';
 import { SessionScreen } from './SessionScreen';
 import { BindScreen } from './BindScreen';
 import { AboutScreen } from './AboutScreen';
@@ -46,11 +47,12 @@ export function HomeRoute({ navigation }: RootStackProps<'Home'>): JSX.Element {
 
   const activeUuid = uuids.includes(selected) ? selected : uuids[0];
 
-  const menu: { label: string; route: 'Team' | 'Chat' | 'Monitor' | 'Session' }[] = [
+  const menu: { label: string; route: 'Team' | 'Chat' | 'Monitor' | 'Session' | 'Me' }[] = [
     { label: '队伍', route: 'Team' },
     { label: '聊天', route: 'Chat' },
     { label: '监控', route: 'Monitor' },
     { label: '会话', route: 'Session' },
+    { label: 'ME 设备', route: 'Me' },
   ];
 
   return (
@@ -144,6 +146,22 @@ export function MonitorRoute(): JSX.Element {
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.body}>
         {conn != null ? <MonitorScreen conn={conn} /> : <Text style={styles.empty}>未连接。</Text>}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+export function MeRoute(): JSX.Element {
+  const { conn, uuids } = useApp();
+  const activeUuid = uuids[0];
+  return (
+    <SafeAreaView style={styles.root}>
+      <ScrollView contentContainerStyle={styles.body}>
+        {conn != null && activeUuid != null ? (
+          <MeScreen conn={conn} uuid={activeUuid} />
+        ) : (
+          <Text style={styles.empty}>未绑定身份：先在主界面完成绑定。</Text>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

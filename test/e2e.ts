@@ -95,6 +95,10 @@ async function main(): Promise<void> {
   backend.handlers.set('friend.remove', () => ({}));
   backend.handlers.set('block.set', () => ({}));
 
+  backend.handlers.set('me.list', () => ({ devices: [{ deviceId: 'dev-1', nodeId: 1, owner: 'uuid-a', kind: 'me', shared: [] }] }));
+  backend.handlers.set('me.share', () => ({}));
+  backend.handlers.set('me.unshare', () => ({}));
+
   backend.handlers.set('team.leave', () => ({}));
   backend.handlers.set('team.disband', () => ({}));
   backend.handlers.set('team.info', () => ({ team: { teamId: 42, name: 'mock队', joinMode: 'open', members: [{ uuid: 'uuid-a', role: 'leader' }, { uuid: 'uuid-b', role: 'member' }] } }));
@@ -226,6 +230,18 @@ async function main(): Promise<void> {
 
     chatA.close(); chatB.close();
     connA.close(); connB.close();
+  }
+
+  // 11) ME 设备域 roundtrip
+  {
+    const conn = new HorizonConn(new NodeTransport(), { host: '127.0.0.1', port, token: backend.token });
+    await conn.start();
+    const list = await conn.req('me.list', { uuid: 'uuid-a' });
+    const share = await conn.req('me.share', { uuid: 'uuid-a', deviceId: 'dev-1', target: 'uuid-b', level: 'control' });
+    const unshare = await conn.req('me.unshare', { uuid: 'uuid-a', deviceId: 'dev-1' });
+    step('ME 设备域 roundtrip', list.ok && list.b?.devices?.length === 1 && share.ok && unshare.ok,
+      `list=${list.b?.devices?.length} share=${share.ok} unshare=${unshare.ok}`);
+    conn.close();
   }
 
   backend.close();

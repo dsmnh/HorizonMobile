@@ -12,7 +12,7 @@ import { RnTransport } from './src/net/transport-rn';
 import { preauthOp } from './src/net/preauth';
 import { saveLastConn } from './src/ui/lastConn';
 import { AppContext, type RootStackParamList } from './src/ui/nav';
-import { LoginRoute, HomeRoute, TeamRoute, ChatRoute, MonitorRoute, SessionRoute } from './src/ui/routes';
+import { LoginRoute, HomeRoute, TeamRoute, ChatRoute, MonitorRoute, SessionRoute, MeRoute } from './src/ui/routes';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -82,6 +82,7 @@ export default function App(): JSX.Element {
           <Stack.Screen name="Chat" component={ChatRoute} />
           <Stack.Screen name="Monitor" component={MonitorRoute} />
           <Stack.Screen name="Session" component={SessionRoute} />
+          <Stack.Screen name="Me" component={MeRoute} />
         </Stack.Navigator>
       </NavigationContainer>
     </AppContext.Provider>
