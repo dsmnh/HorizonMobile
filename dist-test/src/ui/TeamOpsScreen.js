@@ -92,10 +92,10 @@ function TeamOpsScreen({ conn, uuid, onChanged }) {
 
       <react_native_1.View style={styles.row}>
         <react_native_1.Text style={styles.joinLabel}>加入方式：</react_native_1.Text>
-        <react_native_1.Pressable style={[styles.btn2, busy && styles.disabled]} disabled={busy} onPress={() => void run('team.joinmode', { mode: 'open' }, '已切换公开')}>
+        <react_native_1.Pressable style={[styles.btn2, busy && styles.disabled]} disabled={busy} onPress={() => void run('team.setJoinMode', { mode: 'open' }, '已切换公开')}>
           <react_native_1.Text style={styles.btn2Text}>open</react_native_1.Text>
         </react_native_1.Pressable>
-        <react_native_1.Pressable style={[styles.btn2, busy && styles.disabled]} disabled={busy} onPress={() => void run('team.joinmode', { mode: 'invite' }, '已切换邀请制')}>
+        <react_native_1.Pressable style={[styles.btn2, busy && styles.disabled]} disabled={busy} onPress={() => void run('team.setJoinMode', { mode: 'invite' }, '已切换邀请制')}>
           <react_native_1.Text style={styles.btn2Text}>invite</react_native_1.Text>
         </react_native_1.Pressable>
       </react_native_1.View>

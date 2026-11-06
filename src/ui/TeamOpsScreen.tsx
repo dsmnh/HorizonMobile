@@ -75,11 +75,11 @@ export function TeamOpsScreen({ conn, uuid, onChanged }: TeamOpsScreenProps): JS
       <View style={styles.row}>
         <Text style={styles.joinLabel}>加入方式：</Text>
         <Pressable style={[styles.btn2, busy && styles.disabled]} disabled={busy}
-          onPress={() => void run('team.joinmode', { mode: 'open' }, '已切换公开')}>
+          onPress={() => void run('team.setJoinMode', { mode: 'open' }, '已切换公开')}>
           <Text style={styles.btn2Text}>open</Text>
         </Pressable>
         <Pressable style={[styles.btn2, busy && styles.disabled]} disabled={busy}
-          onPress={() => void run('team.joinmode', { mode: 'invite' }, '已切换邀请制')}>
+          onPress={() => void run('team.setJoinMode', { mode: 'invite' }, '已切换邀请制')}>
           <Text style={styles.btn2Text}>invite</Text>
         </Pressable>
       </View>

@@ -92,7 +92,7 @@ async function main(): Promise<void> {
   backend.handlers.set('team.leave', () => ({}));
   backend.handlers.set('team.disband', () => ({}));
   backend.handlers.set('team.info', () => ({ teamId: 1, name: 'mock队', members: [] }));
-  backend.handlers.set('team.joinmode', () => ({}));
+  backend.handlers.set('team.setJoinMode', () => ({}));
 
   // 5) 错误传播
   {
@@ -158,7 +158,7 @@ async function main(): Promise<void> {
     await conn.start();
     const created = await conn.req('team.create', { uuid: 'uuid-a', name: 'op队' });
     const info = await conn.req('team.info', { uuid: 'uuid-a' });
-    const mode = await conn.req('team.joinmode', { uuid: 'uuid-a', mode: 'open' });
+    const mode = await conn.req('team.setJoinMode', { uuid: 'uuid-a', mode: 'open' });
     const disband = await conn.req('team.disband', { uuid: 'uuid-a' });
     step('队伍操作 roundtrip',
       created.ok && created.b?.teamId === 42 && info.ok && mode.ok && disband.ok,
