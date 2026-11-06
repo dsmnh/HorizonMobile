@@ -2,7 +2,7 @@
  * 主界面（迁移适配指南 §首屏占位）：连接状态 + 绑定 UUID 列表 + 断开。
  * 队伍/聊天/ME 各屏随逐屏迁移增量接入（guide §逐屏适配清单）。
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { type HorizonConn } from '../net/conn';
 import { TeamScreen } from './TeamScreen';
@@ -25,6 +25,8 @@ export interface HomeScreenProps {
 }
 
 export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, onUuidsChanged }: HomeScreenProps): JSX.Element {
+  const [selected, setSelected] = useState<string>('');
+  const activeUuid = uuids.includes(selected) ? selected : uuids[0];
   return (
     <View style={styles.card}>
       <Text style={styles.brand}>Horizon</Text>
@@ -48,16 +50,19 @@ export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, o
       ) : (
         <View>
           {uuids.map((u) => (
-            <View key={u} style={styles.uuidRow}>
-              <Text style={styles.uuidText}>{u}</Text>
-            </View>
+            <Pressable key={u} style={[styles.uuidRow, u === activeUuid && styles.uuidRowActive]}
+              onPress={() => setSelected(u)}>
+              <Text style={[styles.uuidText, u === activeUuid && styles.uuidTextActive]}>
+                {u}{u === activeUuid ? '  ← 当前' : ''}
+              </Text>
+            </Pressable>
           ))}
-          {conn != null && (
+          {conn != null && activeUuid != null && (
             <>
-              <TeamScreen conn={conn} uuid={uuids[0]} />
-              <TeamOpsScreen conn={conn} uuid={uuids[0]} onChanged={() => undefined} />
-              <TeamRosterScreen conn={conn} uuid={uuids[0]} />
-              <ChatScreen conn={conn} uuid={uuids[0]} />
+              <TeamScreen conn={conn} uuid={activeUuid} />
+              <TeamOpsScreen conn={conn} uuid={activeUuid} onChanged={() => undefined} />
+              <TeamRosterScreen conn={conn} uuid={activeUuid} />
+              <ChatScreen conn={conn} uuid={activeUuid} />
             </>
           )}
         </View>
@@ -91,7 +96,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     marginTop: 6,
   },
+  uuidRowActive: { borderWidth: 1, borderColor: '#2E6BE6' },
   uuidText: { color: '#E8EEF9', fontSize: 13 },
+  uuidTextActive: { color: '#6E9BF0' },
   btn: {
     borderRadius: 8,
     paddingVertical: 13,

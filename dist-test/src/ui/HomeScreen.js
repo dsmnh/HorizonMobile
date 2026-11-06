@@ -1,14 +1,44 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HomeScreen = HomeScreen;
 /**
  * 主界面（迁移适配指南 §首屏占位）：连接状态 + 绑定 UUID 列表 + 断开。
  * 队伍/聊天/ME 各屏随逐屏迁移增量接入（guide §逐屏适配清单）。
  */
-const react_1 = __importDefault(require("react"));
+const react_1 = __importStar(require("react"));
 const react_native_1 = require("react-native");
 const TeamScreen_1 = require("./TeamScreen");
 const ChatScreen_1 = require("./ChatScreen");
@@ -19,6 +49,8 @@ const MonitorScreen_1 = require("./MonitorScreen");
 const SessionScreen_1 = require("./SessionScreen");
 const AboutScreen_1 = require("./AboutScreen");
 function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, onUuidsChanged }) {
+    const [selected, setSelected] = (0, react_1.useState)('');
+    const activeUuid = uuids.includes(selected) ? selected : uuids[0];
     return (<react_native_1.View style={styles.card}>
       <react_native_1.Text style={styles.brand}>Horizon</react_native_1.Text>
       <react_native_1.View style={styles.statusRow}>
@@ -33,14 +65,16 @@ function HomeScreen({ host, port, connected, uuids, conn, onDisconnect, onUuidsC
                 if (list.length > 0)
                     onUuidsChanged(list);
             }}/>)) : (<react_native_1.View>
-          {uuids.map((u) => (<react_native_1.View key={u} style={styles.uuidRow}>
-              <react_native_1.Text style={styles.uuidText}>{u}</react_native_1.Text>
-            </react_native_1.View>))}
-          {conn != null && (<>
-              <TeamScreen_1.TeamScreen conn={conn} uuid={uuids[0]}/>
-              <TeamOpsScreen_1.TeamOpsScreen conn={conn} uuid={uuids[0]} onChanged={() => undefined}/>
-              <TeamRosterScreen_1.TeamRosterScreen conn={conn} uuid={uuids[0]}/>
-              <ChatScreen_1.ChatScreen conn={conn} uuid={uuids[0]}/>
+          {uuids.map((u) => (<react_native_1.Pressable key={u} style={[styles.uuidRow, u === activeUuid && styles.uuidRowActive]} onPress={() => setSelected(u)}>
+              <react_native_1.Text style={[styles.uuidText, u === activeUuid && styles.uuidTextActive]}>
+                {u}{u === activeUuid ? '  ← 当前' : ''}
+              </react_native_1.Text>
+            </react_native_1.Pressable>))}
+          {conn != null && activeUuid != null && (<>
+              <TeamScreen_1.TeamScreen conn={conn} uuid={activeUuid}/>
+              <TeamOpsScreen_1.TeamOpsScreen conn={conn} uuid={activeUuid} onChanged={() => undefined}/>
+              <TeamRosterScreen_1.TeamRosterScreen conn={conn} uuid={activeUuid}/>
+              <ChatScreen_1.ChatScreen conn={conn} uuid={activeUuid}/>
             </>)}
         </react_native_1.View>)}
 
@@ -70,7 +104,9 @@ const styles = react_native_1.StyleSheet.create({
         paddingHorizontal: 12,
         marginTop: 6,
     },
+    uuidRowActive: { borderWidth: 1, borderColor: '#2E6BE6' },
     uuidText: { color: '#E8EEF9', fontSize: 13 },
+    uuidTextActive: { color: '#6E9BF0' },
     btn: {
         borderRadius: 8,
         paddingVertical: 13,
