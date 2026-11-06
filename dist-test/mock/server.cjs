@@ -153,6 +153,28 @@ class MockAppBackend {
                     if (b === undefined)
                         continue; // 不回包（超时用例）
                     write(jsonFrame(0x11, { id: body.id, ok: true, b }));
+                    // chat.*.send 成功后把消息回显进发送者（及私聊对端）的 chat 流（契约 1.4.0 定向投递）
+                    if (b && b.ts && body.op.endsWith('.send')) {
+                        const msg = {
+                            t: 'd',
+                            boot: 1,
+                            seq: Date.now(),
+                            ts: b.ts,
+                            uuid: (body.p ?? {}).uuid ?? '',
+                            events: [{
+                                    k: 'msg',
+                                    mid: b.mid ?? Date.now(),
+                                    from: (body.p ?? {}).uuid ?? '',
+                                    scope: body.op.includes('private') ? 'private' : 'public',
+                                    text: (body.p ?? {}).text ?? '',
+                                }],
+                        };
+                        const p1 = (body.p ?? {}).uuid;
+                        const targets = this.activeStreams.filter((st) => st.op === 'chat' && st.uuid === p1);
+                        for (const st of targets) {
+                            st.write(jsonFrame(0x22, { s: st.id, f: msg }));
+                        }
+                    }
                     continue;
                 }
             }

@@ -80,6 +80,15 @@ async function main(): Promise<void> {
     conn.close();
   }
 
+  // 聊天域脚本（场景 7 用）
+  backend.handlers.set('chat.history', () => ({
+    messages: [
+      { mid: 1, from: 'uuid-old', text: '历史消息', ts: 1 },
+    ],
+    more: false,
+  }));
+  backend.handlers.set('chat.public.send', () => ({ ts: 2, mid: 2 }));
+
   // 5) 错误传播
   {
     backend.clockFails = 0;
@@ -115,6 +124,26 @@ async function main(): Promise<void> {
     const aCount = backend.chatStreamCount('uuid-a');
     step('UNSUB 后停止投递', aCount === 0 && gotB?.mid === 8, `chatA 登记=${aCount} B=${JSON.stringify(gotB)}`);
     chatB.close();
+    conn.close();
+  }
+
+  // 7) 聊天域：history 拉取 + public.send 回显经 chat 流送达发送者
+  {
+    const conn = new HorizonConn(new NodeTransport(), { host: '127.0.0.1', port, token: backend.token });
+    await conn.start();
+    const chat = conn.subscribeStream('chat', { uuid: 'uuid-a' });
+    await waitFor(() => chat.streamId >= 0, 2000);
+
+    let event: any = null;
+    chat.addEventListener((e) => { event = e; });
+    const hist = await conn.req('chat.history', { uuid: 'uuid-a', scope: 'public', limit: 50 });
+    step('chat.history 拉取', hist.ok && Array.isArray(hist.b?.messages) && hist.b.messages.length === 1,
+      JSON.stringify(hist.b));
+    const send = await conn.req('chat.public.send', { uuid: 'uuid-a', text: 'hi' });
+    await waitFor(() => event !== null, 2000);
+    step('chat.public.send 回显经流送达', send.ok && event?.k === 'msg' && event?.text === 'hi' && event?.from === 'uuid-a',
+      `res=${JSON.stringify(send.b)} event=${JSON.stringify(event)}`);
+    chat.close();
     conn.close();
   }
 

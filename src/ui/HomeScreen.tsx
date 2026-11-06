@@ -6,6 +6,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { type HorizonConn } from '../net/conn';
 import { TeamScreen } from './TeamScreen';
+import { ChatScreen } from './ChatScreen';
 
 export interface HomeScreenProps {
   host: string;
@@ -39,7 +40,12 @@ export function HomeScreen({ host, port, connected, uuids, conn, onDisconnect }:
               <Text style={styles.uuidText}>{u}</Text>
             </View>
           ))}
-          {conn != null && <TeamScreen conn={conn} uuid={uuids[0]} />}
+          {conn != null && (
+            <>
+              <TeamScreen conn={conn} uuid={uuids[0]} />
+              <ChatScreen conn={conn} uuid={uuids[0]} />
+            </>
+          )}
         </View>
       )}
 

@@ -11,6 +11,7 @@ exports.HomeScreen = HomeScreen;
 const react_1 = __importDefault(require("react"));
 const react_native_1 = require("react-native");
 const TeamScreen_1 = require("./TeamScreen");
+const ChatScreen_1 = require("./ChatScreen");
 function HomeScreen({ host, port, connected, uuids, conn, onDisconnect }) {
     return (<react_native_1.View style={styles.card}>
       <react_native_1.Text style={styles.brand}>Horizon</react_native_1.Text>
@@ -28,7 +29,10 @@ function HomeScreen({ host, port, connected, uuids, conn, onDisconnect }) {
           {uuids.map((u) => (<react_native_1.View key={u} style={styles.uuidRow}>
               <react_native_1.Text style={styles.uuidText}>{u}</react_native_1.Text>
             </react_native_1.View>))}
-          {conn != null && <TeamScreen_1.TeamScreen conn={conn} uuid={uuids[0]}/>}
+          {conn != null && (<>
+              <TeamScreen_1.TeamScreen conn={conn} uuid={uuids[0]}/>
+              <ChatScreen_1.ChatScreen conn={conn} uuid={uuids[0]}/>
+            </>)}
         </react_native_1.View>)}
 
       <react_native_1.Pressable style={styles.btn} onPress={onDisconnect}>
