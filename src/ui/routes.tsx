@@ -48,7 +48,7 @@ export function HomeRoute({ navigation }: RootStackProps<'Home'>): JSX.Element {
 
   const activeUuid = uuids.includes(selected) ? selected : uuids[0];
 
-  const menu: { label: string; route: 'Team' | 'Chat' | 'Monitor' | 'Session' | 'Me' }[] = [
+  const menu: { label: string; route: 'Team' | 'Chat' | 'Monitor' | 'Session' | 'Me' | 'Settings' }[] = [
     { label: '队伍', route: 'Team' },
     { label: '聊天', route: 'Chat' },
     { label: '监控', route: 'Monitor' },
