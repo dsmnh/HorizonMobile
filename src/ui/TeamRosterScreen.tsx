@@ -130,6 +130,15 @@ export function TeamRosterScreen({ conn, uuid, onChanged }: TeamRosterScreenProp
       ))}
 
       <View style={styles.idRow}>
+        <TextInput style={styles.input} value={inviteTarget} onChangeText={setInviteTarget}
+          placeholder="邀请目标 UUID" placeholderTextColor="#5A6B8C" autoCapitalize="none" editable={!busy} />
+        <Pressable style={styles.btn} disabled={busy || !inviteTarget.trim()}
+          onPress={() => void run('team.invite', { target: inviteTarget.trim() }, '邀请已发出')}>
+          <Text style={styles.btnText}>邀请</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.idRow}>
         <TextInput style={styles.input} value={inviteId} onChangeText={setInviteId}
           placeholder="邀请 ID（收到的邀请）" placeholderTextColor="#5A6B8C" editable={!busy} />
         <Pressable style={styles.btn} disabled={busy || !inviteId.trim()}

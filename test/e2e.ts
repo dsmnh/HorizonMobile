@@ -1,8 +1,10 @@
-/** e2e 对拍：HorizonConn（node 传输）↔ mock/server.cjs，覆盖契约 1.2.0 App 平面核心行为。 */
+/** e2e 对拍：HorizonConn（node 传输）↔ mock/server.cjs，覆盖契约 1.6.0 App 平面核心行为。 */
 import { strict as assert } from 'node:assert';
 import { MockAppBackend } from '../mock/server.cjs';
-import { HorizonConn } from '../src/net/conn';
+import { HorizonConn, type Transport, type TlsOptions } from '../src/net/conn';
 import { preauthOp } from '../src/net/preauth';
+import { T, FLAG_TLS_BOUND, encodeFrame, jsonFrame } from '../src/net/protocol';
+import { fingerprintMatches, normalizeFingerprint } from '../src/net/tls-pin';
 import { NodeTransport } from './transport-node';
 
 process.on('unhandledRejection', (reason) => {
@@ -303,6 +305,73 @@ async function main(): Promise<void> {
     conn.close();
   }
 
+  // 15) 新增界面入口的契约参数对拍（team.invite / rank.sync / admin.opSet / account.uuids / me.query）
+  {
+    const seen: Record<string, any> = {};
+    backend.handlers.set('team.invite', (p: any) => { seen.invite = p; return { inviteId: 9, expiresAt: 1 }; });
+    backend.handlers.set('rank.sync', (p: any) => { seen.rank = p; return { queued: true }; });
+    backend.handlers.set('admin.opSet', (p: any) => { seen.opSet = p; return { queued: false, nodeId: p.nodeId }; });
+    backend.handlers.set('account.uuids', () => ({ uuids: [{ uuid: 'uuid-a', name: '测试玩家' }] }));
+    backend.handlers.set('me.query', (p: any) => p.queryId
+      ? { items: [{ item: 'minecraft:iron_ingot', count: 4 }], pending: false }
+      : { pending: true, queryId: 'query-160' });
+
+    const conn = new HorizonConn(new NodeTransport(), { host: '127.0.0.1', port, token: backend.token });
+    await conn.start();
+    const invite = await conn.req('team.invite', { uuid: 'uuid-a', target: 'uuid-b' });
+    const rank = await conn.req('rank.sync', { uuid: 'uuid-a', nodeId: 1 });
+    const opSet = await conn.req('admin.opSet', { uuid: 'uuid-b', nodeId: 1, grant: true });
+    const ids = await conn.req('account.uuids', {});
+    const first = await conn.req('me.query', { uuid: 'uuid-a', deviceId: 'dev-1' });
+    const polled = await conn.req('me.query', { queryId: first.b.queryId });
+    step('新增界面入口参数对齐契约 1.6.0',
+      invite.ok && seen.invite?.target === 'uuid-b'
+      && rank.ok && seen.rank?.uuid === 'uuid-a' && seen.rank?.nodeId === 1
+      && opSet.ok && seen.opSet?.grant === true
+      && ids.b?.uuids?.[0]?.name === '测试玩家'
+      && first.b?.pending === true && polled.b?.items?.[0]?.count === 4,
+      `invite=${seen.invite?.target} rank.uuid=${seen.rank?.uuid} opSet.grant=${seen.opSet?.grant} query=${first.b?.queryId}`);
+    conn.close();
+  }
+
+  // 16) 契约 §9.1：TLS 连接所有帧带 0x02，缺标记的入帧按降级剥离终止
+  {
+    const transport = new InMemoryTransport();
+    let fatal = '';
+    const conn = new HorizonConn(transport, {
+      host: '127.0.0.1', port: 1, token: backend.token, tls: true,
+      onFatal: (code) => { fatal = code; },
+    });
+    const started = conn.start();
+    await sleep(20);
+    const helloBound = transport.written.length === 1
+      && (transport.written[0][5] & FLAG_TLS_BOUND) !== 0;
+    transport.inject(jsonFrame(T.HELLO_ACK, {
+      v: 1, name: 'Mock', ver: '0.0.0', time: Math.floor(Date.now() / 1000),
+      nonce: 'nonce-tls', caps: [], plane: 'app',
+    }, FLAG_TLS_BOUND));
+    await sleep(20);
+    transport.inject(encodeFrame(T.AUTH_OK, Buffer.from(JSON.stringify({ role: 'user' })), FLAG_TLS_BOUND));
+    await started;
+    const allBound = transport.written.every((f) => (f[5] & FLAG_TLS_BOUND) !== 0);
+    transport.inject(jsonFrame(T.PUSH, { s: 1, f: {} }, 0));
+    step('TLS 逐帧绑定与降级剥离终止',
+      helloBound && allBound && fatal === 'TLS_FLAGS_MISMATCH' && !conn.isConnected,
+      `frames=${transport.written.length} fatal=${fatal}`);
+    conn.close();
+  }
+
+  // 17) 证书指纹规范化与固定判定（RN 与 node 传输共用）
+  {
+    const plain = 'AB'.repeat(32);
+    const colon = Array.from({ length: 32 }, () => 'AB').join(':');
+    const ok = fingerprintMatches(colon, plain)
+      && !fingerprintMatches(plain, 'CD'.repeat(32))
+      && !fingerprintMatches('not-a-fingerprint', plain)
+      && normalizeFingerprint(colon) === plain.toLowerCase();
+    step('证书指纹规范化与固定判定', ok, `normalize=${normalizeFingerprint(colon).slice(0, 8)}…`);
+  }
+
   backend.close();
   let failed = 0;
   for (const line of results) {
@@ -323,6 +392,35 @@ async function waitFor(cond: () => boolean, timeoutMs: number): Promise<void> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 内存传输：不建立真实 TLS 会话，用于断言连接层的出帧标记与入帧一致性判定。 */
+class InMemoryTransport implements Transport {
+  readonly written: Buffer[] = [];
+  private dataCb: ((chunk: Buffer) => void) | null = null;
+  private closeCb: (() => void) | null = null;
+
+  async connect(_host: string, _port: number, _tls?: TlsOptions): Promise<void> {}
+
+  write(data: Buffer): void {
+    this.written.push(data);
+  }
+
+  onData(cb: (chunk: Buffer) => void): void {
+    this.dataCb = cb;
+  }
+
+  onClose(cb: () => void): void {
+    this.closeCb = cb;
+  }
+
+  close(): void {
+    this.closeCb?.();
+  }
+
+  inject(frame: Buffer): void {
+    this.dataCb?.(frame);
+  }
 }
 
 void main();

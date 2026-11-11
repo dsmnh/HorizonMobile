@@ -1,6 +1,7 @@
 /**
  * 监控屏（迁移适配指南 §MonitorScreen，阶段 6）：metrics.network 5 秒轮询渲染节点帧。
- * 权限：super/owner（契约 1.5.0）；普通账号展示后端的结构化拒绝。
+ * 另提供 rank.sync（每 UUID 每日一次）与 admin.opSet（服主/超管）入口。
+ * 权限：super/owner（契约 1.6.0）；普通账号展示后端的结构化拒绝。
  * MSPT/TPS 由服务端 TickMonitor 5s 窗口采集（HorizonModServer）。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -23,15 +24,36 @@ interface NodeFrame {
 
 export interface MonitorScreenProps {
   conn: HorizonConn;
+  /** 当前选中的绑定身份；rank.sync 按 UUID 每日限次，缺省时禁用该入口。 */
+  uuid?: string;
 }
 
-export function MonitorScreen({ conn }: MonitorScreenProps): JSX.Element {
+export function MonitorScreen({ conn, uuid = '' }: MonitorScreenProps): JSX.Element {
   const [nodes, setNodes] = useState<NodeFrame[]>([]);
   const [error, setError] = useState('');
   const [polling, setPolling] = useState(true);
   const [syncNodeId, setSyncNodeId] = useState('');
   const [syncMsg, setSyncMsg] = useState('');
+  const [opTarget, setOpTarget] = useState('');
+  const [opNodeId, setOpNodeId] = useState('');
+  const [opMsg, setOpMsg] = useState('');
   const timerRef = useRef<any>(null);
+
+  const applyOpSet = async (grant: boolean) => {
+    setOpMsg('');
+    try {
+      const res: Res = await conn.req('admin.opSet', {
+        uuid: opTarget.trim(),
+        nodeId: Number(opNodeId),
+        grant,
+      });
+      setOpMsg(res.ok
+        ? (res.b?.queued ? '已入队（节点离线）' : '已下发到节点')
+        : `admin.opSet: ${res.m ?? '失败'}`);
+    } catch (e: any) {
+      setOpMsg(String(e.message ?? e));
+    }
+  };
 
   const refresh = useCallback(async () => {
     setError('');
@@ -81,10 +103,10 @@ export function MonitorScreen({ conn }: MonitorScreenProps): JSX.Element {
           placeholderTextColor={colors.faint}
           keyboardType="number-pad"
         />
-        <Pressable style={styles.syncBtn} disabled={!syncNodeId.trim()}
+        <Pressable style={styles.syncBtn} disabled={!syncNodeId.trim() || !uuid}
           onPress={() => {
             setSyncMsg('');
-            void conn.req('rank.sync', { nodeId: Number(syncNodeId) }).then((res) => {
+            void conn.req('rank.sync', { uuid, nodeId: Number(syncNodeId) }).then((res) => {
               setSyncMsg(res.ok ? '已排队（queued）' : `rank.sync: ${res.m ?? '失败'}`);
             }).catch((e: any) => setSyncMsg(String(e.message ?? e)));
           }}>
@@ -92,6 +114,37 @@ export function MonitorScreen({ conn }: MonitorScreenProps): JSX.Element {
         </Pressable>
       </View>
       {syncMsg !== '' && <Text style={styles.syncMsg}>{syncMsg}</Text>}
+
+      <Text style={styles.sectionLabel}>玩家 OP 管理（admin.opSet，服主/超管）</Text>
+      <View style={styles.syncRow}>
+        <TextInput
+          style={[styles.syncInput, styles.wideInput]}
+          value={opTarget}
+          onChangeText={setOpTarget}
+          placeholder="目标玩家 UUID"
+          placeholderTextColor={colors.faint}
+          autoCapitalize="none"
+        />
+        <TextInput
+          style={styles.syncInput}
+          value={opNodeId}
+          onChangeText={setOpNodeId}
+          placeholder="节点 ID"
+          placeholderTextColor={colors.faint}
+          keyboardType="number-pad"
+        />
+      </View>
+      <View style={styles.syncRow}>
+        <Pressable style={styles.syncBtn} disabled={!opTarget.trim() || !opNodeId.trim()}
+          onPress={() => void applyOpSet(true)}>
+          <Text style={styles.syncBtnText}>授予 OP</Text>
+        </Pressable>
+        <Pressable style={styles.syncBtn} disabled={!opTarget.trim() || !opNodeId.trim()}
+          onPress={() => void applyOpSet(false)}>
+          <Text style={styles.syncBtnText}>撤销 OP</Text>
+        </Pressable>
+      </View>
+      {opMsg !== '' && <Text style={styles.syncMsg}>{opMsg}</Text>}
 
       {nodes.map((n) => (
         <View key={n.nodeId} style={styles.nodeCard}>
@@ -135,6 +188,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 13,
   },
+  wideInput: { width: 'auto', flex: 1 },
   syncBtn: { borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
   syncBtnText: { color: colors.primaryText, fontSize: 12 },
   syncMsg: { color: colors.ok, fontSize: 12, marginTop: 6 },

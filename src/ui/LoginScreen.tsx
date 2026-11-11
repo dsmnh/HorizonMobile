@@ -1,6 +1,6 @@
 /**
  * 登录/注册屏（迁移适配指南 §SetupScreen）：后端地址 + 账号密码 + 双动作。
- * 协议面：预鉴权 account.login / account.register（src/net/preauth.ts）。
+ * 协议面：预鉴权 account.login / account.register / account.resetPassword（src/net/preauth.ts）。
  */
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -15,16 +15,27 @@ export interface LoginScreenProps {
     name: string,
     pass: string,
   ) => Promise<void>;
+  /** 预鉴权重设密码；返回空字符串表示成功，否则为错误文案。 */
+  onResetPassword: (
+    host: string,
+    port: number,
+    recoverCode: string,
+    newPassword: string,
+  ) => Promise<string>;
   busy: boolean;
   error: string;
 }
 
-export function LoginScreen({ onAuthenticate, busy, error }: LoginScreenProps): JSX.Element {
+export function LoginScreen({ onAuthenticate, onResetPassword, busy, error }: LoginScreenProps): JSX.Element {
   const [host, setHost] = useState('');
   const [port, setPort] = useState('');
   const [name, setName] = useState('');
   const [pass, setPass] = useState('');
   const [loaded, setLoaded] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [recoverCode, setRecoverCode] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [resetMsg, setResetMsg] = useState('');
 
   // 上次成功连接的地址与账号名预填（AsyncStorage；失败保持空表单）
   useEffect(() => {
@@ -44,6 +55,17 @@ export function LoginScreen({ onAuthenticate, busy, error }: LoginScreenProps): 
       return;
     }
     void onAuthenticate(host, p, mode, name, pass);
+  };
+
+  const submitReset = async () => {
+    const p = parseInt(port, 10);
+    if (!host || !p || !recoverCode.trim() || !newPass) {
+      setResetMsg('需填写后端地址、恢复码与新密码');
+      return;
+    }
+    setResetMsg('处理中…');
+    const failure = await onResetPassword(host, p, recoverCode.trim(), newPass);
+    setResetMsg(failure || '密码已重设；该账号全部会话已注销，请用新密码登录');
   };
 
   if (!loaded) {
@@ -103,6 +125,37 @@ export function LoginScreen({ onAuthenticate, busy, error }: LoginScreenProps): 
         disabled={busy} onPress={() => submit('register')}>
         <Text style={[styles.btnText, styles.secondaryText]}>注册新账号</Text>
       </Pressable>
+
+      <Pressable style={styles.resetToggle} onPress={() => setResetOpen((v) => !v)}>
+        <Text style={styles.resetToggleText}>{resetOpen ? '收起重设密码' : '用恢复码重设密码'}</Text>
+      </Pressable>
+      {resetOpen && (
+        <View>
+          <Text style={styles.label}>恢复码</Text>
+          <TextInput
+            style={styles.input}
+            value={recoverCode}
+            onChangeText={setRecoverCode}
+            placeholder="游戏内 /dsmnhmobile recover 生成的恢复码"
+            placeholderTextColor="#5A6B8C"
+            autoCapitalize="none"
+            editable={!busy}
+          />
+          <Text style={styles.label}>新密码</Text>
+          <TextInput
+            style={styles.input}
+            value={newPass}
+            onChangeText={setNewPass}
+            secureTextEntry
+            editable={!busy}
+          />
+          <Pressable style={[styles.btn, styles.secondary, busy && styles.disabled]}
+            disabled={busy} onPress={() => void submitReset()}>
+            <Text style={[styles.btnText, styles.secondaryText]}>重设密码</Text>
+          </Pressable>
+          {resetMsg !== '' && <Text style={styles.resetMsg}>{resetMsg}</Text>}
+        </View>
+      )}
     </View>
   );
 }
@@ -141,6 +194,9 @@ const styles = StyleSheet.create({
   },
   primary: { backgroundColor: colors.primary },
   secondary: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.primary },
+  resetToggle: { alignSelf: 'flex-start', marginTop: 16, paddingVertical: 4 },
+  resetToggleText: { color: colors.primaryText, fontSize: 12 },
+  resetMsg: { color: colors.muted, fontSize: 12, marginTop: 8 },
   disabled: { opacity: 0.5 },
   btnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   secondaryText: { color: colors.primaryText },

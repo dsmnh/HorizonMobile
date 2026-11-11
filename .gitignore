@@ -1,6 +1,7 @@
 node_modules/
 build/
 dist/
+dist-test/
 *.local
 
 # 本地进度文档（不上传，规则见工作区 doc/AI协作.md）

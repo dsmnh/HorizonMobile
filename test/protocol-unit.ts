@@ -1,6 +1,6 @@
 /** 协议帧编解码与签名单元测试（无网络依赖，纯逻辑验证）。 */
 import { strict as assert } from 'node:assert';
-import { encodeFrame, T, readFrame, MAX_FRAME_BYTES } from '../src/net/protocol';
+import { encodeFrame, T, readFrame, MAX_FRAME_BYTES, FLAG_TLS_BOUND } from '../src/net/protocol';
 import { sign, kidOf } from '../src/net/auth';
 
 function reader(data: Buffer) {
@@ -44,6 +44,15 @@ function testFrameEmptyPayload() {
   console.log('PASS  empty payload frame');
 }
 
+function testFrameFlags() {
+  assert.equal(encodeFrame(T.PING)[5], 0, '未传 flags 时缺省为 0');
+  const frame = encodeFrame(T.REQ, Buffer.from('{}', 'utf8'), FLAG_TLS_BOUND);
+  assert.equal(frame[5], FLAG_TLS_BOUND, '出帧写入 0x02');
+  const { readExact } = reader(frame);
+  assert.equal(readFrame(readExact)!.flags, FLAG_TLS_BOUND, '入帧读出 0x02');
+  console.log('PASS  flags 0x02 编码与缺省');
+}
+
 function testFrameTooShort() {
   const bad = Buffer.alloc(4);
   bad.writeUInt32BE(1, 0); // len < 2
@@ -82,6 +91,7 @@ function testKidOf() {
 function runAll() {
   testFrameRoundtrip();
   testFrameEmptyPayload();
+  testFrameFlags();
   testFrameTooShort();
   testFrameMaxSize();
   testSignatureConsistency();

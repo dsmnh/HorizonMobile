@@ -2,7 +2,7 @@
  * ME 设备屏（迁移适配指南 §ItemsScreen 基础，阶段 5）：
  * me.list 跨子服汇总（自有+被共享，含共享明细）+ me.share/unshare 管理。
  * 设备注册来自节点（me.register node op）；无设备时空态即预期。
- * me.query 物品查询依赖节点侧 AE2 执行器，接入后从本屏入口进入。
+ * me.query 由节点侧 AE2 执行器完成，App 先取 queryId 再轮询结果（契约 1.6.0 §8.5）。
  */
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -30,6 +30,11 @@ export function MeScreen({ conn, uuid }: MeScreenProps): JSX.Element {
   const [shareTarget, setShareTarget] = useState('');
   const [busy, setBusy] = useState(false);
   const [okMsg, setOkMsg] = useState('');
+  const [queryDevice, setQueryDevice] = useState('');
+  const [queryId, setQueryId] = useState('');
+  const [queryItems, setQueryItems] = useState<any[]>([]);
+  const [queryMsg, setQueryMsg] = useState('');
+  const [queryBusy, setQueryBusy] = useState(false);
 
   const load = useCallback(async () => {
     setError('');
@@ -78,6 +83,35 @@ export function MeScreen({ conn, uuid }: MeScreenProps): JSX.Element {
     }
   };
 
+  /** 首次请求取回 queryId，随后以 queryId 轮询；节点离线或设备未登记由后端结构化拒绝。 */
+  const runQuery = async (poll: boolean) => {
+    if (queryBusy || (poll ? !queryId : !queryDevice.trim())) return;
+    setQueryBusy(true);
+    setQueryMsg('');
+    try {
+      const res: Res = poll
+        ? await conn.req('me.query', { queryId })
+        : await conn.req('me.query', { uuid, deviceId: queryDevice.trim() });
+      if (!res.ok) {
+        setQueryMsg(`me.query: ${res.m ?? '失败'}`);
+        return;
+      }
+      if (res.b?.pending) {
+        const nextId = String(res.b.queryId ?? queryId);
+        setQueryId(nextId);
+        setQueryItems([]);
+        setQueryMsg(`查询执行中（${nextId}），点击「刷新结果」取回`);
+      } else {
+        setQueryItems(Array.isArray(res.b?.items) ? res.b.items : []);
+        setQueryMsg(res.b?.error ? `节点回报：${res.b.error}` : '查询完成');
+      }
+    } catch (e: any) {
+      setQueryMsg(String(e.message ?? e));
+    } finally {
+      setQueryBusy(false);
+    }
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.headerRow}>
@@ -112,6 +146,9 @@ export function MeScreen({ conn, uuid }: MeScreenProps): JSX.Element {
               <Text style={styles.pickText}>{shareDevice === d.deviceId ? '已选中（下方输入共享目标）' : '选中管理共享'}</Text>
             </Pressable>
           )}
+          <Pressable style={styles.pickBtn} onPress={() => { setQueryDevice(d.deviceId); setQueryId(''); setQueryItems([]); }}>
+            <Text style={styles.pickText}>{queryDevice === d.deviceId ? '已选中（下方可发起查询）' : '选中查询物品'}</Text>
+          </Pressable>
         </View>
       ))}
 
@@ -129,6 +166,26 @@ export function MeScreen({ conn, uuid }: MeScreenProps): JSX.Element {
           </Pressable>
         </View>
       )}
+
+      <Text style={styles.sectionLabel}>AE2 物品查询（me.query，节点执行后回填）</Text>
+      <View style={styles.shareRow}>
+        <TextInput style={styles.input} value={queryDevice} onChangeText={setQueryDevice}
+          placeholder="设备 ID（点上方设备自动填入）" placeholderTextColor={colors.faint} autoCapitalize="none" />
+        <Pressable style={styles.btn} disabled={queryBusy || !queryDevice.trim()}
+          onPress={() => void runQuery(false)}>
+          <Text style={styles.btnText}>发起查询</Text>
+        </Pressable>
+        <Pressable style={styles.btnOutline} disabled={queryBusy || !queryId}
+          onPress={() => void runQuery(true)}>
+          <Text style={styles.btnOutlineText}>刷新结果</Text>
+        </Pressable>
+      </View>
+      {queryMsg !== '' && <Text style={styles.queryMsg}>{queryMsg}</Text>}
+      {queryItems.map((it, i) => (
+        <Text key={i} style={styles.itemRow} numberOfLines={1}>
+          {String(it.displayName ?? it.item ?? '未知物品')} × {String(it.count ?? 0)}
+        </Text>
+      ))}
 
       {okMsg !== '' && <Text style={styles.ok}>{okMsg}</Text>}
     </View>
@@ -168,6 +225,11 @@ const styles = StyleSheet.create({
   },
   btn: { backgroundColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
   btnDanger: { borderWidth: 1, borderColor: colors.danger, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
+  btnOutline: { borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 9 },
+  btnOutlineText: { color: colors.primaryText, fontSize: 12 },
   btnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
+  sectionLabel: { color: colors.faint, fontSize: 11, marginTop: 16 },
+  queryMsg: { color: colors.muted, fontSize: 12, marginTop: 6 },
+  itemRow: { color: colors.text, fontSize: 12, marginTop: 4 },
   ok: { color: colors.ok, fontSize: 12, marginTop: 8 },
 });

@@ -1,18 +1,20 @@
 /**
- * App 平面多路复用连接（契约 1.2.0）：HELLO → AUTH（会话 token，HMAC）→ ACTIVE。
- * 一条 TCP 连接多路复用 REQ/SUB；断线指数退避重连（1s→15s），重连后带 sid 重新订阅。
- * 传输经 Transport 注入：测试/mock 用 node:net，RN 运行时注入 react-native-tcp-socket 适配器。
- *
- * 并发纪律（e2e 重连风暴教训）：
- * - 数据泵全局唯一：start() 注册一次，永不替换；握手读帧走同一泵的一次性 waiter。
- * - 重连单飞：reconnecting 标志合并多次断连事件，任何时刻至多一个重连循环。
- * - PING 定时器随连接生灭：断连/关闭先 clear，杜绝旧定时器向新连接写帧。
+ * App 平面多路复用连接（契约 1.6.0）：HELLO → AUTH（会话 token，HMAC）→ ACTIVE。
+ * 单连接复用 REQ/SUB，断线指数退避重连并重订阅；传输经 Transport 注入。
+ * TLS 模式下所有出帧置 0x02 并校验入帧一致性（§9.1），默认关闭。
+ * 数据泵全局唯一、重连单飞、PING 定时器随连接生灭，避免并发写帧冲突。
  */
-import { Frame, PROTOCOL_VERSION, T, encodeFrame, jsonFrame } from './protocol';
+import { Frame, PROTOCOL_VERSION, T, FLAG_TLS_BOUND, encodeFrame, jsonFrame } from './protocol';
 import { kidOf, sign } from './auth';
 
+/** TLS 连接参数（契约 §9.1）；指纹为证书 SHA-256，允许带冒号。 */
+export interface TlsOptions {
+  enabled: boolean;
+  certFingerprint?: string;
+}
+
 export interface Transport {
-  connect(host: string, port: number): Promise<void>;
+  connect(host: string, port: number, tls?: TlsOptions): Promise<void>;
   write(data: Buffer): void;
   onData(cb: (chunk: Buffer) => void): void;
   onClose(cb: () => void): void;
@@ -28,6 +30,12 @@ export interface ConnOptions {
   requestTimeoutMs?: number;
   backoffInitialMs?: number;
   backoffMaxMs?: number;
+  /** 启用 TLS 外层；默认关闭，兼容现有明文 mock/e2e。 */
+  tls?: boolean;
+  /** 固定信任的证书 SHA-256 指纹；TLS 模式下必须匹配，否则断开。 */
+  certFingerprint?: string;
+  /** 终止性错误（指纹不匹配、flags 降级剥离）回调；此类错误不进入自动重连。 */
+  onFatal?: (code: string) => void;
 }
 
 export interface Res<T = any> {
@@ -105,6 +113,8 @@ export class HorizonConn {
   private failCount = 0;
   /** 握手期一次性读帧 waiter；ACTIVE 期为 null，帧全部走 onFrame 分发。 */
   private handshakeWaiter: ((f: Frame) => void) | null = null;
+  /** 握手期错误出口：flags 一致性失败时主动终止等待，避免握手悬挂。 */
+  private handshakeFail: ((e: Error) => void) | null = null;
   /** 重连单飞标志：onDisconnected 可能被多次触发，只放行第一个。 */
   private reconnecting = false;
   /** 当前连接的 PING 定时器；断连即清。 */
@@ -124,6 +134,17 @@ export class HorizonConn {
 
   get isConnected(): boolean {
     return this.authed;
+  }
+
+  /** TLS 连接上所有出帧置 0x02；明文连接恒为 0（契约 §9.1）。 */
+  private get frameFlags(): number {
+    return this.opts.tls ? FLAG_TLS_BOUND : 0;
+  }
+
+  private tlsOptions(): TlsOptions | undefined {
+    return this.opts.tls
+      ? { enabled: true, certFingerprint: this.opts.certFingerprint }
+      : undefined;
   }
 
   /** 启动连接与常驻重连循环；resolve 于首次鉴权成功，reject 于终止性错误（撤销/版本不兼容）。 */
@@ -162,7 +183,7 @@ export class HorizonConn {
       }, this.opts.requestTimeoutMs);
       this.pending.set(id, { resolve, reject, timer });
     });
-    this.transport.write(jsonFrame(T.REQ, { id, op, p }));
+    this.transport.write(jsonFrame(T.REQ, { id, op, p }, this.frameFlags));
     return promise;
   }
 
@@ -190,7 +211,7 @@ export class HorizonConn {
     const id = ++this.nextId;
     const frame: any = { id, op: stream.op, p };
     if (sid) frame.sid = sid;
-    this.transport.write(jsonFrame(T.SUB, frame));
+    this.transport.write(jsonFrame(T.SUB, frame, this.frameFlags));
     // SUB_OK 由帧分发器按 id 完成；断连时 pending 被 reject，这里吞掉避免未捕获崩溃。
     const promise = new Promise<Res>((resolve) => {
       const timer = setTimeout(() => this.pending.delete(id), this.opts.requestTimeoutMs);
@@ -212,7 +233,7 @@ export class HorizonConn {
   unsub(streamId: number): void {
     if (streamId < 0 || !this.authed) return;
     const frame: any = { s: streamId };
-    this.transport.write(jsonFrame(T.UNSUB, frame));
+    this.transport.write(jsonFrame(T.UNSUB, frame, this.frameFlags));
   }
 
   close(): void {
@@ -230,14 +251,14 @@ export class HorizonConn {
   // ---------- 连接生命周期 ----------
 
   private async handshakeAndAuth(): Promise<void> {
-    await this.transport.connect(this.opts.host, this.opts.port);
+    await this.transport.connect(this.opts.host, this.opts.port, this.tlsOptions());
     // 握手期无并发帧（服务端只回应答），一次性 waiter 从公共泵取帧
     const ack = await this.expectFrame(
       jsonFrame(T.HELLO, {
         v: PROTOCOL_VERSION,
         app: this.opts.app,
         plane: 'app',
-      }),
+      }, this.frameFlags),
     );
     if (ack.type === T.ERR) {
       throw terminal(jsonBody(ack).m ?? 'ERR');
@@ -256,7 +277,7 @@ export class HorizonConn {
     const ts = nowSec() + this.clockOffset;
     const sig = sign(this.opts.token, ts, this.nonce);
     const reply = await this.expectFrame(
-      jsonFrame(T.AUTH, { kid: kidOf(this.opts.token), ts, sig }),
+      jsonFrame(T.AUTH, { kid: kidOf(this.opts.token), ts, sig }, this.frameFlags),
     );
     if (reply.type === T.AUTH_FAIL) {
       const body = jsonBody(reply);
@@ -271,7 +292,7 @@ export class HorizonConn {
             kid: kidOf(this.opts.token),
             ts: ts2,
             sig: sign(this.opts.token, ts2, this.nonce),
-          }),
+          }, this.frameFlags),
         );
         if (retry.type === T.AUTH_FAIL) {
           throw terminal(jsonBody(retry).code ?? 'AUTH_FAILED');
@@ -290,7 +311,7 @@ export class HorizonConn {
         return;
       }
       try {
-        this.transport.write(encodeFrame(T.PING));
+        this.transport.write(encodeFrame(T.PING, undefined, this.frameFlags));
       } catch {
         this.stopPing();
       }
@@ -369,6 +390,11 @@ export class HorizonConn {
       const raw = this.buffer.subarray(4, 4 + len);
       this.buffer = this.buffer.subarray(4 + len);
       const frame: Frame = { type: raw[0], flags: raw[1], payload: raw.subarray(2) };
+      // 连接为 TLS ⇔ 帧带 0x02；不一致按 §9.1 断开，阻止降级剥离。
+      if (((frame.flags & FLAG_TLS_BOUND) !== 0) !== !!this.opts.tls) {
+        this.failFlags();
+        return;
+      }
       if (this.handshakeWaiter) {
         const deliver = this.handshakeWaiter;
         this.handshakeWaiter = null;
@@ -385,13 +411,30 @@ export class HorizonConn {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.handshakeWaiter = null;
+        this.handshakeFail = null;
         reject(new Error('握手超时'));
       }, 15_000);
       this.handshakeWaiter = (f: Frame) => {
         clearTimeout(timer);
+        this.handshakeFail = null;
         resolve(f);
       };
+      this.handshakeFail = (e: Error) => {
+        clearTimeout(timer);
+        this.handshakeWaiter = null;
+        reject(e);
+      };
     });
+  }
+
+  /** flags 与 TLS 状态不一致：断开连接并以终止性错误结束，不进入重连。 */
+  private failFlags(): void {
+    const fail = this.handshakeFail;
+    this.handshakeWaiter = null;
+    this.handshakeFail = null;
+    this.close();
+    this.opts.onFatal?.('TLS_FLAGS_MISMATCH');
+    if (fail) fail(terminal('TLS_FLAGS_MISMATCH'));
   }
 
   private onFrame(frame: Frame): void {

@@ -93,7 +93,7 @@ AEMonitor-Frontend（WebUI 子模块，mod 侧 3.0.0 起不再打包）
 | 建库脚本主副本 | `D:\Develop\Game\AEMobildAll\tools` |
 | 代理桥仓库 | `D:\Develop\Game\AEMobildAll\AEMobileBridge` |
 | 图标库本地副本（**不进 git**） | `D:\Develop\Game\AEMobildAll\iconpack` |
-| 在线更新包输出 | `D:\Develop\Game\update\dsmgtnhupdate\ae` |
+| 在线更新包输出 | **已弃用**（见根目录 `AGENTS.md` §2） |
 | **游戏客户端**（MultiMC 实例） | `D:\Game\Minecraft\MMCproject\instances\GTNHRC2\.minecraft` |
 | **服务端**（Thermos 1.7.10） | `D:\Game\Minecraft\Server\GTNH290RC2` |
 | BungeeCord 代理 | `D:\Game\Minecraft\Server\BC` |
@@ -136,7 +136,7 @@ AEMonitor-Frontend（WebUI 子模块，mod 侧 3.0.0 起不再打包）
 13. **MuMu NAT 直连 10.0.2.2 连接不稳定**：先 `curl http://127.0.0.1:8081/status` 确认 Metro 是否在运行，再判断是否为网络问题。
 14. **SecureStore 单值 2048 字节**：多账号不能写入一个 key。现在是 `accounts.index` 存 id 数组、每账号一个 `account.<id>`。
 15. **根导航的 Setup/Main 用 `enteredRef` 锁住**：只看 `complete` 的话，主界面里切到未配好的账号会把整棵树回退到 Setup。`ServerSettingsScreen` 判断"是不是首次配置"要用 `navigation.canGoBack()`。
-16. **在线线路列表**：`ae/servers.json`（Gitea `dsmgtnhupdate`），同 `host:port` 会覆盖内置线路名；地址存 SecureStore `servers.list_url`。
+16. **在线线路列表**：`ae/servers.json`（原更新源已弃用，见根目录 `AGENTS.md` §2），同 `host:port` 会覆盖内置线路名；地址存 SecureStore `servers.list_url`。
 17. **启动白屏的三个来源**：① `colors.xml` 的 `splashscreen_background`（改完要重新构建 APK）；② `SQLiteProvider` 加载期间渲染 `null`，靠 `BootOverlay` 覆盖；③ dev-client 自己的白色启动页（release 包没有）。
 18. **状态栏不要用默认 translucent**：`expo-status-bar` 在 Android 默认透明，内容会绘制到状态栏下面。现在 `translucent={false}` + 各屏 `useSafeAreaInsets().top` 双重保障。
 19. **release 包要另外构建**：`cd android && ./gradlew assembleRelease`。**签名读仓库根的

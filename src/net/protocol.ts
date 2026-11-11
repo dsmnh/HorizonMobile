@@ -1,10 +1,13 @@
 /**
- * Horizon App 平面协议（契约 1.2.0）：帧编解码与常量。
+ * Horizon App 平面协议（契约 1.6.0）：帧编解码与常量。
  * 传输无关：只处理字节 <-> Frame，socket 由 conn.ts 注入。
+ * flags 0x02 为逐帧 TLS 绑定标记（§9.1），由连接层统一置位与校验。
  */
 
 export const PROTOCOL_VERSION = 1;
 export const MAX_FRAME_BYTES = 16 * 1024 * 1024;
+/** 逐帧 TLS 绑定标记（契约 §9.1）；TLS 连接上所有帧置位，明文连接不得置位。 */
+export const FLAG_TLS_BOUND = 0x02;
 
 /** 帧类型（登记表 §1），值一经发布不得改动。 */
 export const T = {
@@ -47,17 +50,17 @@ export function readFrame(readExact: (n: number) => Buffer): Frame | null {
   return { type: rest[0], flags: rest[1], payload: rest.subarray(2) };
 }
 
-/** 编码一帧（len = type + flags + payload 的总字节数，大端）。 */
-export function encodeFrame(type: number, payload?: Buffer): Buffer {
+/** 编码一帧（len = type + flags + payload 的总字节数，大端）；flags 缺省为 0。 */
+export function encodeFrame(type: number, payload?: Buffer, flags = 0): Buffer {
   const body = payload ?? Buffer.alloc(0);
   const out = Buffer.alloc(4 + 2 + body.length);
   out.writeUInt32BE(body.length + 2, 0);
   out[4] = type;
-  out[5] = 0;
+  out[5] = flags & 0xff;
   body.copy(out, 6);
   return out;
 }
 
-export function jsonFrame(type: number, obj: unknown): Buffer {
-  return encodeFrame(type, Buffer.from(JSON.stringify(obj), 'utf8'));
+export function jsonFrame(type: number, obj: unknown, flags = 0): Buffer {
+  return encodeFrame(type, Buffer.from(JSON.stringify(obj), 'utf8'), flags);
 }

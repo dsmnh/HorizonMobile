@@ -18,6 +18,13 @@ export interface AppState {
     name: string,
     pass: string,
   ) => Promise<void>;
+  /** 预鉴权重设密码；返回空字符串表示成功，否则为错误文案。 */
+  resetPassword: (
+    host: string,
+    port: number,
+    recoverCode: string,
+    newPassword: string,
+  ) => Promise<string>;
   disconnect: () => void;
   busy: boolean;
   error: string;
@@ -29,6 +36,7 @@ export const AppContext = createContext<AppState>({
   uuids: [],
   setUuids: () => undefined,
   authenticate: async () => undefined,
+  resetPassword: async () => '未连接后端',
   disconnect: () => undefined,
   busy: false,
   error: '',

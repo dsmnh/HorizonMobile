@@ -46,6 +46,11 @@ export default function App(): JSX.Element {
         void saveLastConn({ host, port, name });
         const c = new HorizonConn(new RnTransport() as Transport, {
           host, port, token: res.b.token,
+          onFatal: (code) => {
+            setError(`连接终止：${code}`);
+            setConn(null);
+            setConnected(false);
+          },
         });
         await c.start();
         const u = await c.req('account.uuids');
@@ -61,6 +66,20 @@ export default function App(): JSX.Element {
     [],
   );
 
+  /** 恢复码重设密码属预鉴权 op；成功后后端注销该账号全部会话。 */
+  const resetPassword = useCallback(
+    async (host: string, port: number, recoverCode: string, newPassword: string) => {
+      try {
+        const res = await preauthOp(new RnTransport() as Transport, host, port,
+          'account.resetPassword', { recoverCode, newPassword });
+        return res.ok ? '' : (res.m ?? '重设密码失败');
+      } catch (e: any) {
+        return String(e.message ?? e);
+      }
+    },
+    [],
+  );
+
   const disconnect = useCallback(() => {
     conn?.close();
     setConn(null);
@@ -69,7 +88,7 @@ export default function App(): JSX.Element {
   }, [conn]);
 
   return (
-    <AppContext.Provider value={{ conn, connected, uuids, setUuids, authenticate, disconnect, busy, error }}>
+    <AppContext.Provider value={{ conn, connected, uuids, setUuids, authenticate, resetPassword, disconnect, busy, error }}>
       <StatusBar barStyle="light-content" backgroundColor="#0D1526" />
       <NavigationContainer>
         <Stack.Navigator

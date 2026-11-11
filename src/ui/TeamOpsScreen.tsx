@@ -1,7 +1,7 @@
 /**
  * 队伍操作屏（迁移适配指南 §TeamScreen 操作子集）：常用队伍域 REQ 动作。
- * 覆盖 create/info/leave/disband/joinmode；invite/apply/setrole 等需要目标输入的
- * 动作随下一迁移增量（游戏内命令在 /dsmnhmobile team 子命令全量可用）。
+ * 覆盖 create/info/leave/disband/setJoinMode；邀请、申请、审批与角色/转让等
+ * 需要目标输入的动作在成员与审批屏（TeamRosterScreen）完成，全 15 个队伍 op 已覆盖。
  */
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';

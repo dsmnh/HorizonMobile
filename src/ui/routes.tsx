@@ -19,7 +19,7 @@ import { BindScreen } from './BindScreen';
 import { AboutScreen } from './AboutScreen';
 
 export function LoginRoute({ navigation }: RootStackProps<'Login'>): JSX.Element {
-  const { authenticate, busy, error, conn } = useApp();
+  const { authenticate, resetPassword, busy, error, conn } = useApp();
   // 鉴权成功（conn 就位）即进入主界面
   React.useEffect(() => {
     if (conn) {
@@ -29,7 +29,7 @@ export function LoginRoute({ navigation }: RootStackProps<'Login'>): JSX.Element
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.body}>
-        <LoginScreen onAuthenticate={authenticate} busy={busy} error={error} />
+        <LoginScreen onAuthenticate={authenticate} onResetPassword={resetPassword} busy={busy} error={error} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -143,11 +143,13 @@ export function ChatRoute(): JSX.Element {
 }
 
 export function MonitorRoute(): JSX.Element {
-  const { conn } = useApp();
+  const { conn, uuids } = useApp();
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.body}>
-        {conn != null ? <MonitorScreen conn={conn} /> : <Text style={styles.empty}>未连接。</Text>}
+        {conn != null
+          ? <MonitorScreen conn={conn} uuid={uuids[0] ?? ''} />
+          : <Text style={styles.empty}>未连接。</Text>}
       </ScrollView>
     </SafeAreaView>
   );
@@ -170,10 +172,11 @@ export function MeRoute(): JSX.Element {
 }
 
 export function SettingsRoute(): JSX.Element {
+  const { conn } = useApp();
   return (
     <SafeAreaView style={styles.root}>
       <ScrollView contentContainerStyle={styles.body}>
-        <SettingsScreen />
+        <SettingsScreen conn={conn ?? undefined} />
         <AboutScreen />
       </ScrollView>
     </SafeAreaView>
