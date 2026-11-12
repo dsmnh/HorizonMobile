@@ -86,7 +86,8 @@ export function SettingsScreen({ conn }: SettingsScreenProps): JSX.Element {
         <Text style={styles.btnOutlineText}>重置已信任证书</Text>
       </Pressable>
       <Text style={styles.note}>
-        重置后下次连接会重新记录服务端证书指纹；证书更换或切换到另一后端时使用。
+        重置后下次连接会重新记录服务端证书指纹；服务端使用自有证书时同样按首次连接记录。
+        证书更换或切换到另一后端时使用。
       </Text>
 
       <Text style={styles.sectionLabel}>账号绑定身份（account.uuids）</Text>
