@@ -2,6 +2,7 @@
 import { strict as assert } from 'node:assert';
 import { encodeFrame, T, readFrame, MAX_FRAME_BYTES, FLAG_TLS_BOUND } from '../src/net/protocol';
 import { sign, kidOf } from '../src/net/auth';
+import { decidePin, normalizeFingerprint, pinKey } from '../src/net/tls-pin';
 
 function reader(data: Buffer) {
   let pos = 0;
@@ -88,6 +89,21 @@ function testKidOf() {
   console.log('PASS  kidOf');
 }
 
+/** 契约 §9.1：首次连接记录指纹，后续不一致拒绝；预置指纹优先于本地记录。 */
+function testTofuDecision() {
+  const fp = 'AB'.repeat(32);
+  const other = 'CD'.repeat(32);
+  assert.equal(decidePin(undefined, fp), 'record', '首次连接应记录');
+  assert.equal(decidePin(fp, fp), 'match', '同一指纹应通过');
+  assert.equal(decidePin(fp, other), 'mismatch', '指纹变化应拒绝');
+  assert.equal(decidePin(undefined, fp, fp), 'match', '预置指纹直接比对');
+  assert.equal(decidePin(fp, other, other), 'match', '预置指纹优先于本地记录');
+  assert.equal(decidePin(undefined, 'bad'), 'mismatch', '非法指纹一律拒绝');
+  assert.equal(normalizeFingerprint('AB:CD'), 'abcd');
+  assert.equal(pinKey('Example.COM', 44444), 'horizon.tls.pin.example.com:44444');
+  console.log('PASS  TOFU 指纹判定与键格式');
+}
+
 function runAll() {
   testFrameRoundtrip();
   testFrameEmptyPayload();
@@ -96,6 +112,7 @@ function runAll() {
   testFrameMaxSize();
   testSignatureConsistency();
   testKidOf();
+  testTofuDecision();
   console.log('== protocol unit tests: all passed ==');
 }
 

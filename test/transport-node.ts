@@ -5,7 +5,10 @@
 import net from 'node:net';
 import tls from 'node:tls';
 import type { Transport, TlsOptions } from '../src/net/conn';
-import { fingerprintMatches } from '../src/net/tls-pin';
+import { decidePin, normalizeFingerprint, pinKey } from '../src/net/tls-pin';
+
+/** 进程内 TOFU 存储：与 RN 的 AsyncStorage 语义一致，测试进程结束即清空。 */
+const trustedPins = new Map<string, string>();
 
 export class NodeTransport implements Transport {
   private socket: net.Socket | tls.TLSSocket | null = null;
@@ -24,11 +27,16 @@ export class NodeTransport implements Transport {
     return new Promise((resolve, reject) => {
       const onReady = () => {
         if (useTls) {
-          const cert = (socket as tls.TLSSocket).getPeerCertificate();
-          if (!fingerprintMatches(cert?.fingerprint256, tlsOpts?.certFingerprint)) {
+          const actual = (socket as tls.TLSSocket).getPeerCertificate()?.fingerprint256 ?? '';
+          const key = pinKey(host, port);
+          const decision = decidePin(trustedPins.get(key), actual, tlsOpts?.certFingerprint);
+          if (decision === 'mismatch') {
             socket.destroy();
             if (gen === this.generation) reject(pinMismatch());
             return;
+          }
+          if (decision === 'record') {
+            trustedPins.set(key, normalizeFingerprint(actual));
           }
         }
         resolve();

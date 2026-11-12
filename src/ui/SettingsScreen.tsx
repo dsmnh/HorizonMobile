@@ -2,11 +2,13 @@
  * 设置屏（迁移适配指南 §SettingsScreen）：本地偏好、缓存管理与账号绑定身份查询。
  * account.uuids 返回当前账号绑定的 UUID 与可选玩家名（契约 1.6.0 §8.7）。
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from './theme';
 import { HorizonConn, type Res } from '../net/conn';
+import { pinKey } from '../net/tls-pin';
+import { loadLastConn } from './lastConn';
 
 interface Identity {
   uuid: string;
@@ -20,6 +22,27 @@ export interface SettingsScreenProps {
 export function SettingsScreen({ conn }: SettingsScreenProps): JSX.Element {
   const [msg, setMsg] = useState('');
   const [identities, setIdentities] = useState<Identity[]>([]);
+  const [lastConn, setLastConn] = useState<{ host: string; port: number } | null>(null);
+
+  useEffect(() => {
+    void loadLastConn().then((v) => {
+      if (v) setLastConn({ host: v.host, port: v.port });
+    });
+  }, []);
+
+  /** 重置后下次连接按 TOFU 重新记录指纹，用于证书轮换或换后端。 */
+  const resetPin = async () => {
+    if (!lastConn) {
+      setMsg('暂无上次连接信息，先成功连接一次后端');
+      return;
+    }
+    try {
+      await AsyncStorage.removeItem(pinKey(lastConn.host, lastConn.port));
+      setMsg(`已重置 ${lastConn.host}:${lastConn.port} 的证书信任，下次连接重新记录指纹`);
+    } catch {
+      setMsg('重置失败（存储不可用）');
+    }
+  };
 
   const clearConn = async () => {
     try {
@@ -57,6 +80,14 @@ export function SettingsScreen({ conn }: SettingsScreenProps): JSX.Element {
       <Pressable style={styles.btn} onPress={() => void clearConn()}>
         <Text style={styles.btnText}>清除上次连接信息</Text>
       </Pressable>
+
+      <Text style={styles.sectionLabel}>TLS 证书信任（首次连接信任）</Text>
+      <Pressable style={styles.btnOutline} onPress={() => void resetPin()}>
+        <Text style={styles.btnOutlineText}>重置已信任证书</Text>
+      </Pressable>
+      <Text style={styles.note}>
+        重置后下次连接会重新记录服务端证书指纹；证书更换或切换到另一后端时使用。
+      </Text>
 
       <Text style={styles.sectionLabel}>账号绑定身份（account.uuids）</Text>
       <Pressable style={styles.btnOutline} disabled={!conn} onPress={() => void loadIdentities()}>

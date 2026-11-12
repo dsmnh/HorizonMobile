@@ -54,6 +54,7 @@ export type RootStackParamList = {
   Monitor: undefined;
   Session: undefined;
   Me: undefined;
+  Bq: undefined;
   Settings: undefined;
 };
 

@@ -13,6 +13,7 @@ import { TeamRosterScreen } from './TeamRosterScreen';
 import { ChatScreen } from './ChatScreen';
 import { MonitorScreen } from './MonitorScreen';
 import { MeScreen } from './MeScreen';
+import { BqScreen } from './BqScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { SessionScreen } from './SessionScreen';
 import { BindScreen } from './BindScreen';
@@ -48,12 +49,13 @@ export function HomeRoute({ navigation }: RootStackProps<'Home'>): JSX.Element {
 
   const activeUuid = uuids.includes(selected) ? selected : uuids[0];
 
-  const menu: { label: string; route: 'Team' | 'Chat' | 'Monitor' | 'Session' | 'Me' | 'Settings' }[] = [
+  const menu: { label: string; route: 'Team' | 'Chat' | 'Monitor' | 'Session' | 'Me' | 'Bq' | 'Settings' }[] = [
     { label: '队伍', route: 'Team' },
     { label: '聊天', route: 'Chat' },
     { label: '监控', route: 'Monitor' },
     { label: '会话', route: 'Session' },
     { label: 'ME 设备', route: 'Me' },
+    { label: 'BQ 同步', route: 'Bq' },
     { label: '设置', route: 'Settings' },
   ];
 
@@ -166,6 +168,17 @@ export function MeRoute(): JSX.Element {
         ) : (
           <Text style={styles.empty}>未绑定身份：先在主界面完成绑定。</Text>
         )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+export function BqRoute(): JSX.Element {
+  const { conn } = useApp();
+  return (
+    <SafeAreaView style={styles.root}>
+      <ScrollView contentContainerStyle={styles.body}>
+        {conn != null ? <BqScreen conn={conn} /> : <Text style={styles.empty}>未连接。</Text>}
       </ScrollView>
     </SafeAreaView>
   );
