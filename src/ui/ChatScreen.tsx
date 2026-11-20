@@ -106,7 +106,8 @@ export function ChatScreen({ conn, uuid }: ChatScreenProps): JSX.Element {
         const id = Number(res.b?.id);
         setOkMsg(Number.isFinite(id) && id > 0 ? `${done}（请求 ID ${id}）` : done);
         if (Number.isFinite(id) && id > 0) setRequestId(String(id));
-        setFriendOp('');
+        // 保留输入以便连续操作：屏蔽后立刻解除需要同一 UUID，清空会让按钮变为不可用
+        if (op === 'friend.accept') setFriendOp('');
       } else {
         setError(`${op}: ${res.m ?? '失败'}`);
       }
