@@ -70,6 +70,32 @@ function testFrameMaxSize() {
   console.log('PASS  oversize frame throws');
 }
 
+/**
+ * RN/Hermes 下 Buffer 由 buffer 垫片提供，其 subarray 返回裸 Uint8Array（没有 toString(encoding)）。
+ * 帧解析必须走 slice，否则载荷会退化成逗号分隔数字、JSON 解析成空对象。此处用垫片实例复现该约束。
+ */
+function testFramePolyfillPayloadDecode() {
+  const PolyBuffer = require('buffer').Buffer;
+  const payload = PolyBuffer.from('{"ok":true}', 'utf8');
+  const frame = PolyBuffer.alloc(4 + 2 + payload.length);
+  frame.writeUInt32BE(payload.length + 2, 0);
+  frame[4] = T.RES;
+  frame[5] = FLAG_TLS_BOUND;
+  payload.copy(frame, 6);
+
+  let pos = 0;
+  const decoded = readFrame((n: number) => {
+    const out = frame.slice(pos, pos + n);
+    pos += n;
+    return out;
+  });
+  assert.ok(decoded, 'decoded not null');
+  assert.equal(decoded!.type, T.RES, 'type');
+  assert.equal(decoded!.flags, FLAG_TLS_BOUND, 'flags');
+  assert.equal(decoded!.payload.toString('utf8'), '{"ok":true}', '垫片 Buffer 上载荷仍能按 utf8 解出');
+  console.log('PASS  polyfill payload decode');
+}
+
 function testSignatureConsistency() {
   // noble HMAC 与 node:crypto HMAC 一致
   const crypto = require('node:crypto');
@@ -110,6 +136,7 @@ function runAll() {
   testFrameFlags();
   testFrameTooShort();
   testFrameMaxSize();
+  testFramePolyfillPayloadDecode();
   testSignatureConsistency();
   testKidOf();
   testTofuDecision();

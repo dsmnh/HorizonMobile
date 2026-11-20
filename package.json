@@ -6,7 +6,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "test": "tsc -p tsconfig.test.json && node dist-test/test/protocol-unit.js && node dist-test/test/e2e.js"
+    "test": "tsc -p tsconfig.test.json && node dist-test/test/protocol-unit.js && node dist-test/test/e2e.js",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
   },
   "dependencies": {
     "@noble/hashes": "^1.4.0",
@@ -14,7 +16,9 @@
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.11.0",
     "@types/react": "^18.3.31",
+    "buffer": "^6.0.3",
     "expo": "^51.0.39",
+    "expo-build-properties": "^0.12.5",
     "react": "^18.2.0",
     "react-native": "^0.74.3",
     "react-native-safe-area-context": "4.10.5",

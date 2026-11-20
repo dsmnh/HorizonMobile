@@ -47,7 +47,8 @@ export function readFrame(readExact: (n: number) => Buffer): Frame | null {
     throw new Error('bad frame length: ' + len);
   }
   const rest = readExact(len);
-  return { type: rest[0], flags: rest[1], payload: rest.subarray(2) };
+  // slice 保持 Buffer 原型：垫片的 subarray 返回裸 Uint8Array，无法按编码解码
+  return { type: rest[0], flags: rest[1], payload: rest.slice(2) };
 }
 
 /** 编码一帧（len = type + flags + payload 的总字节数，大端）；flags 缺省为 0。 */

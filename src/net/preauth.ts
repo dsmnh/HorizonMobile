@@ -3,8 +3,8 @@
  * 在建立会话（AUTH）之前直发 REQ，用于换取会话 token。
  * 传输无关：测试注入 NodeTransport，RN 运行时注入 RnTransport。
  */
-import { T, jsonFrame } from './protocol';
-import type { Transport } from './conn';
+import { FLAG_TLS_BOUND, T, jsonFrame } from './protocol';
+import type { TlsOptions, Transport } from './conn';
 
 export interface PreauthRes<T = any> {
   ok: boolean;
@@ -12,7 +12,10 @@ export interface PreauthRes<T = any> {
   m?: string;
 }
 
-/** 单次预鉴权 op：建连 → HELLO → REQ → 拿 RES 即断。 */
+/**
+ * 单次预鉴权 op：建连 → HELLO → REQ → 拿 RES 即断。
+ * tls 与连接参数同源：启用时出帧置 0x02，入帧缺标记即按降级剥离拒绝（契约 §9.1）。
+ */
 export async function preauthOp(
   transport: Transport,
   host: string,
@@ -20,10 +23,12 @@ export async function preauthOp(
   op: string,
   p: unknown,
   timeoutMs = 15_000,
+  tls?: TlsOptions,
 ): Promise<PreauthRes> {
   let buffer = Buffer.alloc(0);
   let gotNonce = false;
-  await transport.connect(host, port);
+  const flags = tls?.enabled ? FLAG_TLS_BOUND : 0;
+  await transport.connect(host, port, tls);
 
   const result = await new Promise<PreauthRes>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`预鉴权超时：${op}`)), timeoutMs);
@@ -38,14 +43,23 @@ export async function preauthOp(
         if (buffer.length < 4) return;
         const len = buffer.readUInt32BE(0);
         if (buffer.length < 4 + len) return;
-        // len 已含 type+flags：raw = [4, 4+len)，残留自 4+len 起
-        const raw = buffer.subarray(4, 4 + len);
-        buffer = buffer.subarray(4 + len);
+        // len 已含 type+flags：raw = [4, 4+len)，残留自 4+len 起。
+        // 用 slice 而非 subarray：buffer 垫片的 subarray 返回裸 Uint8Array，
+        // 其 toString('utf8') 会退化成逗号分隔数字，导致载荷解析为空对象。
+        const raw = buffer.slice(4, 4 + len);
+        buffer = buffer.slice(4 + len);
         const type = raw[0];
-        const body = raw.length > 2 ? safeJson(raw.subarray(2)) : {};
+        const frameFlags = raw.length > 1 ? raw[1] : 0;
+        const body = raw.length > 2 ? safeJson(raw.slice(2)) : {};
+        if (((frameFlags & FLAG_TLS_BOUND) !== 0) !== (flags !== 0)) {
+          clearTimeout(timer);
+          transport.close();
+          reject(new Error('TLS_FLAGS_MISMATCH'));
+          return;
+        }
         if (type === T.HELLO_ACK) {
           gotNonce = true;
-          transport.write(jsonFrame(T.REQ, { id: 1, op, p }));
+          transport.write(jsonFrame(T.REQ, { id: 1, op, p }, flags));
         } else if (type === T.RES && gotNonce) {
           finish({ ok: !!body.ok, b: body.b, m: body.m ?? undefined });
           return;
@@ -55,7 +69,7 @@ export async function preauthOp(
         }
       }
     });
-    transport.write(jsonFrame(T.HELLO, { v: 1, app: 'HorizonMobile/0.1.0', plane: 'app' }));
+    transport.write(jsonFrame(T.HELLO, { v: 1, app: 'HorizonMobile/0.1.0', plane: 'app' }, flags));
   });
   return result;
 }

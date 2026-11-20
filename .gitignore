@@ -4,5 +4,10 @@ dist/
 dist-test/
 *.local
 
+# expo prebuild 生成的原生工程与缓存（由 scripts/patch-native-modules.mjs 施加原生补丁）
+android/
+ios/
+.expo/
+
 # 本地进度文档（不上传，规则见工作区 doc/AI协作.md）
 doc/

@@ -11,6 +11,7 @@ import type { Transport, TlsOptions } from './conn';
 import { decidePin, normalizeFingerprint, pinKey, type PinStore } from './tls-pin';
 
 /** 证书字段在 TLS 会话就绪后才可用；secureConnect 可能早于会话，做有限次重试。 */
+const CONNECT_TIMEOUT_MS = 15_000;
 const PIN_RETRIES = 20;
 const PIN_RETRY_MS = 50;
 
@@ -38,18 +39,60 @@ export class RnTransport implements Transport {
 
   connect(host: string, port: number, tls?: TlsOptions): Promise<void> {
     return new Promise((resolve, reject) => {
+      // 建连失败必须以 reject 结束：预鉴权在 await connect 之后才装超时定时器，
+      // 这里悬挂会让登录按钮永久停留在 busy 状态。
+      let settled = false;
+      const fail = (e: Error) => {
+        if (settled) return;
+        settled = true;
+        reject(e);
+      };
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const timer = setTimeout(() => fail(new Error(`连接超时：${host}:${port}`)), CONNECT_TIMEOUT_MS);
+      const clear = () => clearTimeout(timer);
+
       if (tls?.enabled) {
-        // tlsCheckValidity 关闭系统信任链校验：自签证书改由指纹固定判定。
-        const socket = TcpSocket.connectTLS({ host, port, tlsCheckValidity: false }, () => {
-          void this.verifyPin(socket, host, port, tls.certFingerprint).then(resolve).catch((e) => {
-            socket.destroy();
-            reject(e);
-          });
+        // android 侧只认 rejectUnauthorized=false 才跳过系统信任链；自签证书的真伪由下方指纹固定判定。
+        // 类型声明未列 rejectUnauthorized，但 android 原生侧按此键决定是否跳过系统信任链。
+        const socket = TcpSocket.connectTLS({ host, port, rejectUnauthorized: false } as any, () => {
+          void this.verifyPin(socket, host, port, tls.certFingerprint)
+            .then(() => {
+              clear();
+              done();
+            })
+            .catch((e) => {
+              clear();
+              socket.destroy();
+              fail(e);
+            });
+        });
+        socket.on('error', (e: Error) => {
+          clear();
+          fail(e);
+        });
+        socket.on('close', () => {
+          clear();
+          fail(new Error('连接已关闭'));
         });
         this.socket = socket;
         this.attach(socket);
       } else {
-        const socket = TcpSocket.createConnection({ host, port }, () => resolve());
+        const socket = TcpSocket.createConnection({ host, port }, () => {
+          clear();
+          done();
+        });
+        socket.on('error', (e: Error) => {
+          clear();
+          fail(e);
+        });
+        socket.on('close', () => {
+          clear();
+          fail(new Error('连接已关闭'));
+        });
         this.socket = socket;
         this.attach(socket);
       }

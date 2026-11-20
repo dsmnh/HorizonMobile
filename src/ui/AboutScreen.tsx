@@ -10,7 +10,7 @@ export function AboutScreen(): JSX.Element {
     <View style={styles.card}>
       <Text style={styles.brand}>Horizon</Text>
       <Text style={styles.sub}>深空矩阵新视野 · GTNH 服务器网络移动端互联生态</Text>
-      <Text style={styles.line}>协议契约：HorizonProtocol 1.5.x（App 平面 HMAC 会话 + 订阅流）</Text>
+      <Text style={styles.line}>协议契约：HorizonProtocol 1.6.3（App 平面 HMAC 会话 + 订阅流）</Text>
       <Text style={styles.line}>组织：github.com/dsmnh</Text>
       <Text style={styles.line}>App 协议栈：本仓库 src/net（帧编解码 / 签名 / 多路复用连接 / 订阅流）</Text>
       <Text style={styles.line}>底座：Expo 51 · React Native 0.74（自 AEMobileApp 迁移）</Text>

@@ -103,7 +103,7 @@ export function HomeRoute({ navigation }: RootStackProps<'Home'>): JSX.Element {
           <Text style={styles.disconnectText}>断开连接</Text>
         </Pressable>
         <AboutScreen />
-        <Text style={styles.footer}>Horizon · 协议 1.5.x · 会话经 HMAC 鉴权</Text>
+        <Text style={styles.footer}>Horizon · 协议 1.6.3 · 会话经 HMAC 鉴权</Text>
       </ScrollView>
     </SafeAreaView>
   );

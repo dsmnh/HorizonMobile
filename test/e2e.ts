@@ -372,6 +372,32 @@ async function main(): Promise<void> {
     step('证书指纹规范化与固定判定', ok, `normalize=${normalizeFingerprint(colon).slice(0, 8)}…`);
   }
 
+  // 18) 预鉴权同样受 TLS 逐帧绑定约束（契约 §9.1）：连接参数与出帧标记一处决定
+  {
+    const transport = new InMemoryTransport();
+    let seenTls: TlsOptions | undefined;
+    const rawConnect = transport.connect.bind(transport);
+    transport.connect = async (h: string, pt: number, tlsOpts?: TlsOptions) => {
+      seenTls = tlsOpts;
+      await rawConnect(h, pt, tlsOpts);
+    };
+    const pending = preauthOp(transport, '127.0.0.1', 44444, 'account.register',
+      { name: 'tls-user', pass: 'p' }, 3000, { enabled: true });
+    await sleep(20);
+    transport.inject(jsonFrame(T.HELLO_ACK, {
+      v: 1, name: 'Mock', ver: '0.0.0', time: Math.floor(Date.now() / 1000),
+      nonce: 'nonce-preauth', caps: [], plane: 'app',
+    }, FLAG_TLS_BOUND));
+    await sleep(20);
+    transport.inject(encodeFrame(T.RES, Buffer.from(JSON.stringify({ ok: true, b: { token: 'tk-preauth' } })), FLAG_TLS_BOUND));
+    const pres = await pending;
+    const allBound = transport.written.length === 2
+      && transport.written.every((f) => (f[5] & FLAG_TLS_BOUND) !== 0);
+    step('预鉴权 TLS 逐帧绑定',
+      seenTls?.enabled === true && allBound && pres.ok && pres.b?.token === 'tk-preauth',
+      `tls=${seenTls?.enabled} frames=${transport.written.length}`);
+  }
+
   backend.close();
   let failed = 0;
   for (const line of results) {

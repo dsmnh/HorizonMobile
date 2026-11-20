@@ -10,6 +10,8 @@ export interface LastConn {
   host: string;
   port: number;
   name: string;
+  /** 上次连接是否启用 TLS；缺省 false 兼容早先保存的记录（契约 §9.1）。 */
+  tls?: boolean;
 }
 
 export async function loadLastConn(): Promise<LastConn | null> {

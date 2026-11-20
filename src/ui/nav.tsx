@@ -17,6 +17,7 @@ export interface AppState {
     mode: 'login' | 'register',
     name: string,
     pass: string,
+    tls: boolean,
   ) => Promise<void>;
   /** 预鉴权重设密码；返回空字符串表示成功，否则为错误文案。 */
   resetPassword: (
@@ -24,6 +25,7 @@ export interface AppState {
     port: number,
     recoverCode: string,
     newPassword: string,
+    tls: boolean,
   ) => Promise<string>;
   disconnect: () => void;
   busy: boolean;

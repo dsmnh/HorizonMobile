@@ -3,6 +3,7 @@
  * 协议面：预鉴权 account.login/register（src/net/preauth.ts）→ HorizonConn 会话 → 各功能屏。
  * 旧底座入口（SQLiteProvider/导航/主题）归档于 src-app-legacy/AppEntry.legacy.tsx。
  */
+import './src/net/buffer-global';
 import React, { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -33,19 +34,21 @@ export default function App(): JSX.Element {
   useEffect(() => () => conn?.close(), [conn]);
 
   const authenticate = useCallback(
-    async (host: string, port: number, mode: 'login' | 'register', name: string, pass: string) => {
+    async (host: string, port: number, mode: 'login' | 'register', name: string, pass: string, tls: boolean) => {
       setBusy(true);
       setError('');
+      // 预鉴权与会话共用同一 TLS 判定：后端 App 平面启用 TLS 时明文连接会被直接断开（契约 §9.1）
+      const tlsOpts = tls ? { enabled: true } : undefined;
       try {
         const res = await preauthOp(new RnTransport() as Transport, host, port,
-          mode === 'login' ? 'account.login' : 'account.register', { name, pass });
+          mode === 'login' ? 'account.login' : 'account.register', { name, pass }, 15_000, tlsOpts);
         if (!res.ok || !res.b?.token) {
           setError(res.m ?? '鉴权失败');
           return;
         }
-        void saveLastConn({ host, port, name });
+        void saveLastConn({ host, port, name, tls });
         const c = new HorizonConn(new RnTransport() as Transport, {
-          host, port, token: res.b.token,
+          host, port, token: res.b.token, tls,
           onFatal: (code) => {
             setError(`连接终止：${code}`);
             setConn(null);
@@ -58,7 +61,8 @@ export default function App(): JSX.Element {
         setConn(c);
         setConnected(true);
       } catch (e: any) {
-        setError(e.message ?? String(e));
+        console.log('[auth] error', String(e && e.message), String(e));
+        setError((e && e.message) || String(e) || '未知异常');
       } finally {
         setBusy(false);
       }
@@ -68,10 +72,10 @@ export default function App(): JSX.Element {
 
   /** 恢复码重设密码属预鉴权 op；成功后后端注销该账号全部会话。 */
   const resetPassword = useCallback(
-    async (host: string, port: number, recoverCode: string, newPassword: string) => {
+    async (host: string, port: number, recoverCode: string, newPassword: string, tls: boolean) => {
       try {
         const res = await preauthOp(new RnTransport() as Transport, host, port,
-          'account.resetPassword', { recoverCode, newPassword });
+          'account.resetPassword', { recoverCode, newPassword }, 15_000, tls ? { enabled: true } : undefined);
         return res.ok ? '' : (res.m ?? '重设密码失败');
       } catch (e: any) {
         return String(e.message ?? e);

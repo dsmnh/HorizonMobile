@@ -387,9 +387,10 @@ export class HorizonConn {
       }
       if (this.buffer.length < 4 + len) return;
       // len 已含 type+flags 两字节：raw = [4, 4+len)，残留从 4+len 起——多切 2 字节会吞掉同 chunk 下一帧
-      const raw = this.buffer.subarray(4, 4 + len);
-      this.buffer = this.buffer.subarray(4 + len);
-      const frame: Frame = { type: raw[0], flags: raw[1], payload: raw.subarray(2) };
+      // slice 而非 subarray：buffer 垫片的 subarray 返回裸 Uint8Array，缺 toString(encoding)
+      const raw = this.buffer.slice(4, 4 + len);
+      this.buffer = this.buffer.slice(4 + len);
+      const frame: Frame = { type: raw[0], flags: raw[1], payload: raw.slice(2) };
       // 连接为 TLS ⇔ 帧带 0x02；不一致按 §9.1 断开，阻止降级剥离。
       if (((frame.flags & FLAG_TLS_BOUND) !== 0) !== !!this.opts.tls) {
         this.failFlags();

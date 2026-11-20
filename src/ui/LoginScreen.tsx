@@ -14,6 +14,7 @@ export interface LoginScreenProps {
     mode: 'login' | 'register',
     name: string,
     pass: string,
+    tls: boolean,
   ) => Promise<void>;
   /** 预鉴权重设密码；返回空字符串表示成功，否则为错误文案。 */
   onResetPassword: (
@@ -21,6 +22,7 @@ export interface LoginScreenProps {
     port: number,
     recoverCode: string,
     newPassword: string,
+    tls: boolean,
   ) => Promise<string>;
   busy: boolean;
   error: string;
@@ -36,6 +38,8 @@ export function LoginScreen({ onAuthenticate, onResetPassword, busy, error }: Lo
   const [recoverCode, setRecoverCode] = useState('');
   const [newPass, setNewPass] = useState('');
   const [resetMsg, setResetMsg] = useState('');
+  // 后端 App 平面启用 TLS 时明文连接会被断开；默认开启，本地明文联调可关闭（契约 §9.1）
+  const [tls, setTls] = useState(true);
 
   // 上次成功连接的地址与账号名预填（AsyncStorage；失败保持空表单）
   useEffect(() => {
@@ -44,6 +48,7 @@ export function LoginScreen({ onAuthenticate, onResetPassword, busy, error }: Lo
         setHost(last.host);
         setPort(String(last.port));
         setName(last.name);
+        setTls(last.tls !== false);
       }
       setLoaded(true);
     });
@@ -54,7 +59,7 @@ export function LoginScreen({ onAuthenticate, onResetPassword, busy, error }: Lo
     if (!host || !p || !name || !pass) {
       return;
     }
-    void onAuthenticate(host, p, mode, name, pass);
+    void onAuthenticate(host, p, mode, name, pass, tls);
   };
 
   const submitReset = async () => {
@@ -64,7 +69,7 @@ export function LoginScreen({ onAuthenticate, onResetPassword, busy, error }: Lo
       return;
     }
     setResetMsg('处理中…');
-    const failure = await onResetPassword(host, p, recoverCode.trim(), newPass);
+    const failure = await onResetPassword(host, p, recoverCode.trim(), newPass, tls);
     setResetMsg(failure || '密码已重设；该账号全部会话已注销，请用新密码登录');
   };
 
@@ -114,6 +119,13 @@ export function LoginScreen({ onAuthenticate, onResetPassword, busy, error }: Lo
         secureTextEntry
         editable={!busy}
       />
+
+      <Pressable style={styles.tlsRow} onPress={() => setTls((v) => !v)} disabled={busy}>
+        <View style={[styles.checkbox, tls && styles.checkboxOn]}>
+          {tls && <Text style={styles.checkboxMark}>✓</Text>}
+        </View>
+        <Text style={styles.tlsText}>启用 TLS（证书指纹首次信任）</Text>
+      </Pressable>
 
       {error !== '' && <Text style={styles.error}>{error}</Text>}
 
@@ -197,6 +209,20 @@ const styles = StyleSheet.create({
   resetToggle: { alignSelf: 'flex-start', marginTop: 16, paddingVertical: 4 },
   resetToggleText: { color: colors.primaryText, fontSize: 12 },
   resetMsg: { color: colors.muted, fontSize: 12, marginTop: 8 },
+  tlsRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16 },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  checkboxOn: { backgroundColor: colors.primary },
+  checkboxMark: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  tlsText: { color: colors.muted, fontSize: 12 },
   disabled: { opacity: 0.5 },
   btnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   secondaryText: { color: colors.primaryText },
