@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors } from './theme';
 import { HorizonConn, type Stream, type TeamEvent } from '../net/conn';
+import { fromEvent, fromHistory, isRelevant } from '../net/chat-merge';
 
 interface ChatMessage {
   mid: number | string;
@@ -37,12 +38,17 @@ export function ChatScreen({ conn, uuid }: ChatScreenProps): JSX.Element {
   const loadHistory = useCallback(async (curScope: 'public' | 'private', curPeer: string) => {
     setError('');
     try {
+      // 私聊历史必须带 peer，未填时不发请求（后端按 BAD_PARAMS:peer 拒绝）
+      if (curScope === 'private' && !curPeer.trim()) {
+        setMessages([]);
+        return;
+      }
       const res = await conn.req('chat.history', curScope === 'private'
         ? { uuid, scope: 'private', peer: curPeer.trim(), limit: 50 }
         : { uuid, scope: 'public', limit: 50 });
       if (res.ok) {
         const list = Array.isArray(res.b?.messages) ? res.b.messages : [];
-        setMessages(list.map((m: any) => ({ mid: m.mid, from: m.from, text: m.text, ts: m.ts })));
+        setMessages(list.map(fromHistory).reverse());
       } else {
         setError(res.m ?? 'chat.history 失败');
       }
@@ -55,19 +61,8 @@ export function ChatScreen({ conn, uuid }: ChatScreenProps): JSX.Element {
     const stream = conn.subscribeStream('chat', { uuid });
     streamRef.current = stream;
     stream.addEventListener((e: TeamEvent) => {
-      if (e.k === 'msg') {
-        // 公开频道并入全部；私聊只并入本人相关（发送或接收）事件
-        const relevant = scope === 'public'
-          ? e.scope === 'public'
-          : e.scope === 'private' && (e.from === peer.trim() || e.to === uuid);
-        if (relevant) {
-          setMessages((prev) => [...prev, {
-            mid: e.mid ?? `${e.seq}`,
-            from: e.from ?? '',
-            text: e.text ?? '',
-            ts: e.ts,
-          }]);
-        }
+      if (e.k === 'msg' && isRelevant(e as any, scope, peer, uuid)) {
+        setMessages((prev) => [...prev, fromEvent(e as any, prev.length + 1)]);
       }
     });
     void loadHistory(scope, peer);
@@ -107,9 +102,11 @@ export function ChatScreen({ conn, uuid }: ChatScreenProps): JSX.Element {
     try {
       const res = await conn.req(op, { uuid, ...p });
       if (res.ok) {
-        setOkMsg(done);
+        // 好友请求回包带 id，直接回填到接受输入框，省去手工抄写
+        const id = Number(res.b?.id);
+        setOkMsg(Number.isFinite(id) && id > 0 ? `${done}（请求 ID ${id}）` : done);
+        if (Number.isFinite(id) && id > 0) setRequestId(String(id));
         setFriendOp('');
-        setRequestId('');
       } else {
         setError(`${op}: ${res.m ?? '失败'}`);
       }

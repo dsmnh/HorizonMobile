@@ -7,6 +7,7 @@ import { T, FLAG_TLS_BOUND, encodeFrame, jsonFrame } from '../src/net/protocol';
 import { fingerprintMatches, normalizeFingerprint } from '../src/net/tls-pin';
 import { normalizeUuids } from '../src/net/identity';
 import { sharePayload, unsharePayload } from '../src/net/me-payload';
+import { fromEvent, fromHistory, isRelevant } from '../src/net/chat-merge';
 import { NodeTransport } from './transport-node';
 
 process.on('unhandledRejection', (reason) => {
@@ -421,6 +422,20 @@ async function main(): Promise<void> {
       && share.deviceId === 'dev-1' && unshare.deviceId === 'dev-1'
       && share.level === 'control',
       `share.target=${share.target} unshare.target=${unshare.target}`);
+  }
+
+  // 21) 聊天归一化：历史用 id、事件用 seq，公聊事件无 scope，私聊按双方判定
+  {
+    const h = fromHistory({ id: 7, from: 'u1', text: '历史', ts: 100 });
+    const missing = fromHistory({ from: 'u2', text: '无 id', ts: 5 });
+    const pub = isRelevant({ k: 'msg', from: 'u1', text: 'x' }, 'public', '', 'u1');
+    const privMine = isRelevant({ k: 'msg', private: true, from: 'u9', to: 'u1' }, 'private', 'u9', 'u1');
+    const privOther = isRelevant({ k: 'msg', private: true, from: 'u8', to: 'u7' }, 'private', 'u9', 'u1');
+    const ev = fromEvent({ from: 'u1', text: 'e' }, 3);
+    step('聊天归一化键名与频道判定',
+      h.mid === 7 && missing.mid !== undefined && String(missing.mid).startsWith('h-')
+      && pub && privMine && !privOther && ev.mid === 3,
+      `hist=${h.mid} fallback=${missing.mid} pub=${pub} priv=${privMine}/${privOther}`);
   }
 
   backend.close();
