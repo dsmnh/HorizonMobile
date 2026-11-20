@@ -7,6 +7,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { HorizonConn, type Res } from '../net/conn';
+import { sharePayload, unsharePayload } from '../net/me-payload';
 import { colors } from './theme';
 
 interface DeviceRow {
@@ -62,14 +63,15 @@ export function MeScreen({ conn, uuid }: MeScreenProps): JSX.Element {
   }, [load]);
 
   const shareAction = async (unshare: boolean) => {
-    if (busy || !shareDevice.trim() || (!unshare && !shareTarget.trim())) return;
+    // 取消共享同样按目标 UUID 定位条目，契约登记表的 me.unshare 载荷含 target。
+    if (busy || !shareDevice.trim() || !shareTarget.trim()) return;
     setBusy(true);
     setError('');
     setOkMsg('');
     try {
       const res: Res = unshare
-        ? await conn.req('me.unshare', { uuid, deviceId: shareDevice.trim() })
-        : await conn.req('me.share', { uuid, deviceId: shareDevice.trim(), target: shareTarget.trim(), level: 'control' });
+        ? await conn.req('me.unshare', unsharePayload(uuid, shareDevice, shareTarget))
+        : await conn.req('me.share', sharePayload(uuid, shareDevice, shareTarget));
       if (res.ok) {
         setOkMsg(unshare ? '已取消共享' : '已共享（control 级）');
         await load();

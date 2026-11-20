@@ -6,6 +6,7 @@ import { preauthOp } from '../src/net/preauth';
 import { T, FLAG_TLS_BOUND, encodeFrame, jsonFrame } from '../src/net/protocol';
 import { fingerprintMatches, normalizeFingerprint } from '../src/net/tls-pin';
 import { normalizeUuids } from '../src/net/identity';
+import { sharePayload, unsharePayload } from '../src/net/me-payload';
 import { NodeTransport } from './transport-node';
 
 process.on('unhandledRejection', (reason) => {
@@ -409,6 +410,17 @@ async function main(): Promise<void> {
       && mixed.length === 2 && mixed[0] === 'uuid-c' && mixed[1] === 'uuid-d'
       && empty.length === 0,
       `objs=${objs.join(',')} mixed=${mixed.join(',')}`);
+  }
+
+  // 20) ME 共享载荷：取消共享同样需要 target，缺键会被后端 BAD_PARAMS 拒绝
+  {
+    const share = sharePayload('uuid-a', ' dev-1 ', ' uuid-b ');
+    const unshare = unsharePayload('uuid-a', ' dev-1 ', ' uuid-b ');
+    step('ME 共享载荷含目标身份',
+      share.target === 'uuid-b' && unshare.target === 'uuid-b'
+      && share.deviceId === 'dev-1' && unshare.deviceId === 'dev-1'
+      && share.level === 'control',
+      `share.target=${share.target} unshare.target=${unshare.target}`);
   }
 
   backend.close();
