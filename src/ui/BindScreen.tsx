@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { colors } from './theme';
 import { HorizonConn, type Res } from '../net/conn';
+import { normalizeUuids } from '../net/identity';
 
 export interface BindScreenProps {
   conn: HorizonConn;
@@ -28,7 +29,9 @@ export function BindScreen({ conn, onBound }: BindScreenProps): JSX.Element {
     try {
       const res: Res = await conn.req('account.bindUUID', { code: c });
       if (res.ok) {
-        const uuids = Array.isArray(res.b?.uuids) ? res.b.uuids : (res.b?.uuid ? [res.b.uuid] : []);
+        // bindUUID 只回单个 uuid，列表以 account.uuids 为准（1.6.0 起条目带玩家名）
+        const list = await conn.req('account.uuids', {});
+        const uuids = list.ok ? normalizeUuids(list.b?.uuids) : normalizeUuids([res.b?.uuid]);
         setOk('绑定成功');
         setCode('');
         onBound(uuids);

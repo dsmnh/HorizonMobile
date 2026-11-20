@@ -11,6 +11,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { HorizonConn, type Transport } from './src/net/conn';
 import { RnTransport } from './src/net/transport-rn';
 import { preauthOp } from './src/net/preauth';
+import { normalizeUuids } from './src/net/identity';
 import { saveLastConn } from './src/ui/lastConn';
 import { AppContext, type RootStackParamList } from './src/ui/nav';
 import { LoginRoute, HomeRoute, TeamRoute, ChatRoute, MonitorRoute, SessionRoute, MeRoute, BqRoute, SettingsRoute } from './src/ui/routes';
@@ -42,6 +43,8 @@ export default function App(): JSX.Element {
       try {
         const res = await preauthOp(new RnTransport() as Transport, host, port,
           mode === 'login' ? 'account.login' : 'account.register', { name, pass }, 15_000, tlsOpts);
+        // 会话结果里的绑定身份同样是对象条目，登录后直接归一化，省一次 account.uuids 往返
+        setUuids(normalizeUuids(res.b?.uuids));
         if (!res.ok || !res.b?.token) {
           setError(res.m ?? '鉴权失败');
           return;
@@ -57,7 +60,7 @@ export default function App(): JSX.Element {
         });
         await c.start();
         const u = await c.req('account.uuids');
-        setUuids(u.ok && Array.isArray(u.b?.uuids) ? u.b.uuids : []);
+        setUuids(u.ok ? normalizeUuids(u.b?.uuids) : []);
         setConn(c);
         setConnected(true);
       } catch (e: any) {

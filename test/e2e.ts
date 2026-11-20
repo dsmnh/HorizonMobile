@@ -5,6 +5,7 @@ import { HorizonConn, type Transport, type TlsOptions } from '../src/net/conn';
 import { preauthOp } from '../src/net/preauth';
 import { T, FLAG_TLS_BOUND, encodeFrame, jsonFrame } from '../src/net/protocol';
 import { fingerprintMatches, normalizeFingerprint } from '../src/net/tls-pin';
+import { normalizeUuids } from '../src/net/identity';
 import { NodeTransport } from './transport-node';
 
 process.on('unhandledRejection', (reason) => {
@@ -396,6 +397,18 @@ async function main(): Promise<void> {
     step('预鉴权 TLS 逐帧绑定',
       seenTls?.enabled === true && allBound && pres.ok && pres.b?.token === 'tk-preauth',
       `tls=${seenTls?.enabled} frames=${transport.written.length}`);
+  }
+
+  // 19) account.uuids 条目归一化（契约 1.6.0 §8.7 起为 {uuid,name} 对象）
+  {
+    const objs = normalizeUuids([{ uuid: 'uuid-a', name: '甲' }, { uuid: 'uuid-b' }]);
+    const mixed = normalizeUuids(['uuid-c', { uuid: 'uuid-d' }, null, { name: '无 uuid' }, 42]);
+    const empty = normalizeUuids(undefined);
+    step('绑定身份条目归一化',
+      objs.length === 2 && objs[0] === 'uuid-a' && objs[1] === 'uuid-b'
+      && mixed.length === 2 && mixed[0] === 'uuid-c' && mixed[1] === 'uuid-d'
+      && empty.length === 0,
+      `objs=${objs.join(',')} mixed=${mixed.join(',')}`);
   }
 
   backend.close();
