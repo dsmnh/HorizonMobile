@@ -4,8 +4,10 @@
  */
 import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from './theme';
 import { loadLastConn } from './lastConn';
+import { pinKey } from '../net/tls-pin';
 
 export interface LoginScreenProps {
   onAuthenticate: (
@@ -40,6 +42,7 @@ export function LoginScreen({ onAuthenticate, onResetPassword, busy, error }: Lo
   const [resetMsg, setResetMsg] = useState('');
   // 后端 App 平面启用 TLS 时明文连接会被断开；默认开启，本地明文联调可关闭（契约 §9.1）
   const [tls, setTls] = useState(true);
+  const [pinMsg, setPinMsg] = useState('');
 
   // 上次成功连接的地址与账号名预填（AsyncStorage；失败保持空表单）
   useEffect(() => {
@@ -60,6 +63,21 @@ export function LoginScreen({ onAuthenticate, onResetPassword, busy, error }: Lo
       return;
     }
     void onAuthenticate(host, p, mode, name, pass, tls);
+  };
+
+  /** 服务端换证后指纹校验会拒绝连接，此时没有会话、进不了设置页，故在登录屏就地提供重置。 */
+  const resetPin = async () => {
+    const p = parseInt(port, 10);
+    if (!host || !p) {
+      setPinMsg('需先填写后端地址与端口');
+      return;
+    }
+    try {
+      await AsyncStorage.removeItem(pinKey(host, p));
+      setPinMsg(`已重置 ${host}:${p} 的证书信任，下次连接重新记录指纹`);
+    } catch {
+      setPinMsg('重置失败（本地存储不可用）');
+    }
   };
 
   const submitReset = async () => {
@@ -126,6 +144,11 @@ export function LoginScreen({ onAuthenticate, onResetPassword, busy, error }: Lo
         </View>
         <Text style={styles.tlsText}>启用 TLS（证书指纹首次信任）</Text>
       </Pressable>
+
+      <Pressable style={styles.resetToggle} onPress={() => void resetPin()}>
+        <Text style={styles.resetToggleText}>重置已信任证书</Text>
+      </Pressable>
+      {pinMsg !== '' && <Text style={styles.resetMsg}>{pinMsg}</Text>}
 
       {error !== '' && <Text style={styles.error}>{error}</Text>}
 

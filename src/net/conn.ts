@@ -364,6 +364,12 @@ export class HorizonConn {
       } catch (e: any) {
         if (e.terminal || !this.running) {
           this.reconnecting = false;
+          // 终止性错误必须上报：重连循环里静默返回会让界面永远停在「自动重连中」，用户无法得知需要重置证书
+          if (e.terminal) {
+            this.running = false;
+            this.stopPing();
+            this.opts.onFatal?.(String(e.message || 'FATAL'));
+          }
           return;
         }
         await sleep(backoff);

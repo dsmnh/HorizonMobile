@@ -438,6 +438,42 @@ async function main(): Promise<void> {
       `hist=${h.mid} fallback=${missing.mid} pub=${pub} priv=${privMine}/${privOther}`);
   }
 
+  // 22) 重连期遇到终止性错误（如服务端换证导致指纹不匹配）必须上报，否则界面永远停在「自动重连中」
+  {
+    const transport = new InMemoryTransport();
+    let fatal = '';
+    let connects = 0;
+    const rawConnect = transport.connect.bind(transport);
+    transport.connect = async (h: string, p: number, tlsOpts?: TlsOptions) => {
+      connects += 1;
+      // 首连成功后模拟服务端换证：重连时指纹校验失败，传输层抛终止性错误
+      if (connects > 1) {
+        throw Object.assign(new Error('CERT_FINGERPRINT_MISMATCH'), { terminal: true });
+      }
+      await rawConnect(h, p, tlsOpts);
+    };
+    const conn = new HorizonConn(transport, {
+      host: '127.0.0.1', port: 1, token: backend.token, tls: true,
+      onFatal: (code) => { fatal = code; },
+    });
+    const started = conn.start();
+    await sleep(20);
+    transport.inject(jsonFrame(T.HELLO_ACK, {
+      v: 1, name: 'Mock', ver: '0.0.0', time: Math.floor(Date.now() / 1000),
+      nonce: 'nonce-reconnect', caps: [], plane: 'app',
+    }, FLAG_TLS_BOUND));
+    await sleep(20);
+    transport.inject(encodeFrame(T.AUTH_OK, Buffer.from(JSON.stringify({ role: 'user' })), FLAG_TLS_BOUND));
+    await started;
+    const beforeDrop = conn.isConnected;
+    transport.drop();
+    await sleep(200);
+    step('重连遇终止性错误上报',
+      beforeDrop && fatal === 'CERT_FINGERPRINT_MISMATCH' && !conn.isConnected && connects === 2,
+      `fatal=${fatal} connects=${connects}`);
+    conn.close();
+  }
+
   backend.close();
   let failed = 0;
   for (const line of results) {
@@ -481,6 +517,11 @@ class InMemoryTransport implements Transport {
   }
 
   close(): void {
+    this.closeCb?.();
+  }
+
+  /** 只触发 close 回调，模拟服务端断开而不销毁测试对象本身。 */
+  drop(): void {
     this.closeCb?.();
   }
 

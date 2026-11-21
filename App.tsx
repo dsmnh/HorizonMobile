@@ -16,6 +16,20 @@ import { saveLastConn } from './src/ui/lastConn';
 import { AppContext, type RootStackParamList } from './src/ui/nav';
 import { LoginRoute, HomeRoute, TeamRoute, ChatRoute, MonitorRoute, SessionRoute, MeRoute, BqRoute, SettingsRoute } from './src/ui/routes';
 
+/** 终止性错误（不重连）的用户可操作文案；非已知码返回 null，由调用方保留原始文案。 */
+function fatalText(code: string): string | null {
+  if (code === 'CERT_FINGERPRINT_MISMATCH') {
+    return '证书指纹与已信任记录不一致：如服务端确实更换过证书，请在下方「重置已信任证书」后重新登录';
+  }
+  if (code === 'PIN_STORE_FAILED') {
+    return '无法保存证书指纹（本地存储不可用），已拒绝连接以免每次重新信任';
+  }
+  if (code === 'TLS_FLAGS_MISMATCH') {
+    return 'TLS 帧标记与连接不一致（疑似降级剥离），已按契约 §9.1 断开';
+  }
+  return null;
+}
+
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App(): JSX.Element {
@@ -53,7 +67,8 @@ export default function App(): JSX.Element {
         const c = new HorizonConn(new RnTransport() as Transport, {
           host, port, token: res.b.token, tls,
           onFatal: (code) => {
-            setError(`连接终止：${code}`);
+            // 终止性错误（指纹变化、帧标记降级）不自动重连，必须给出可操作提示
+            setError(fatalText(code) ?? `连接终止：${code}`);
             setConn(null);
             setConnected(false);
           },
@@ -64,8 +79,9 @@ export default function App(): JSX.Element {
         setConn(c);
         setConnected(true);
       } catch (e: any) {
-        console.log('[auth] error', String(e && e.message), String(e));
-        setError((e && e.message) || String(e) || '未知异常');
+        // 预鉴权阶段的终止性错误（如服务端换证导致指纹不匹配）同样换成可操作文案
+        const msg = String((e && e.message) ?? e ?? '');
+        setError(fatalText(msg) ?? (msg || '未知异常'));
       } finally {
         setBusy(false);
       }
