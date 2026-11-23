@@ -31,5 +31,5 @@
     "@types/node": "^20.14.0",
     "typescript": "^5.5.4"
   },
-  "main": "node_modules/expo/AppEntry.js"
+  "main": "index.js"
 }
