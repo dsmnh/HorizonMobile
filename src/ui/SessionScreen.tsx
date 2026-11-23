@@ -2,10 +2,12 @@
  * 会话管理屏（迁移适配指南 §SettingsScreen 会话域）：列出本账号全部活跃会话并支持撤销。
  * 协议面：account.sessions（current 标记）+ account.revokeSession（契约 §3.5）。
  * 撤销当前会话将触发本端断开（后端 runAfterResponse(conn::close)），上层据此回登录屏。
+ * 视觉对齐 AEMobileApp：会话卡 + 当前会话状态点。
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors } from './theme';
+import { ScrollView, Text, View } from 'react-native';
+import { colors, radius, spacing, themedStyles } from './theme';
+import { Card, Chip, EmptyState, GhostButton, StatusDot } from './components';
 import { HorizonConn, type Res } from '../net/conn';
 
 interface SessionRow {
@@ -62,49 +64,54 @@ export function SessionScreen({ conn, onSelfRevoked }: SessionScreenProps): JSX.
   };
 
   return (
-    <View style={styles.card}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>会话管理</Text>
-        <Pressable style={styles.refreshBtn} onPress={() => void refresh()}>
-          <Text style={styles.refreshText}>刷新</Text>
-        </Pressable>
-      </View>
-      {error !== '' && <Text style={styles.error}>{error}</Text>}
-      {sessions.map((s) => (
-        <View key={s.id} style={styles.row}>
-          <View style={styles.meta}>
-            <Text style={styles.app}>{s.app || '未知客户端'}{s.current ? '（当前）' : ''}</Text>
-            <Text style={styles.seen}>最近活跃 {new Date(s.lastSeen * 1000).toLocaleString()}</Text>
-          </View>
-          <Pressable style={styles.revokeBtn} onPress={() => void revoke(s)}>
-            <Text style={styles.revokeText}>撤销</Text>
-          </Pressable>
+    <ScrollView style={styles.wrap} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
+      <View style={styles.headRow}>
+        <View>
+          <Text style={styles.title}>会话管理</Text>
+          <Text style={styles.sub}>共 {sessions.length} 个会话</Text>
         </View>
+        <GhostButton label="刷新" icon="refresh" tone="neutral" onPress={() => void refresh()} />
+      </View>
+
+      {error !== '' && (
+        <View style={[styles.errBox, { backgroundColor: colors.badSoft, borderColor: colors.bad + '55' }]}>
+          <Text style={[styles.errText, { color: colors.bad }]}>{error}</Text>
+        </View>
+      )}
+
+      {sessions.length === 0 && error === '' && (
+        <EmptyState icon="shield-checkmark-outline" title="暂无会话" subtitle="点刷新重新拉取会话列表" />
+      )}
+
+      {sessions.map((s) => (
+        <Card key={s.id} style={{ marginTop: spacing.m }}>
+          <View style={styles.rowHead}>
+            <View style={styles.appRow}>
+              <StatusDot ok={s.current} />
+              <Text style={styles.app} numberOfLines={1}>{s.app || '未知客户端'}</Text>
+            </View>
+            {s.current && <Chip label="当前" tone="ok" />}
+          </View>
+          <Text style={styles.seen}>最近活跃 {new Date(s.lastSeen * 1000).toLocaleString()}</Text>
+          <View style={styles.actRow}>
+            <GhostButton label="撤销会话" icon="close-circle-outline" tone="bad" onPress={() => void revoke(s)} />
+          </View>
+        </Card>
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 14 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.primary },
-  refreshText: { color: colors.primaryText, fontSize: 12 },
-  error: { color: colors.danger, fontSize: 12, marginTop: 8 },
-  row: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    paddingVertical: 9,
-    paddingHorizontal: 12,
-    marginTop: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  meta: { flex: 1, marginRight: 8 },
-  app: { color: colors.text, fontSize: 14 },
-  seen: { color: colors.faint, fontSize: 11, marginTop: 2 },
-  revokeBtn: { borderWidth: 1, borderColor: colors.danger, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
-  revokeText: { color: colors.danger, fontSize: 12 },
-});
+const styles = themedStyles(() => ({
+  wrap: { flex: 1, paddingHorizontal: spacing.l, paddingTop: spacing.m },
+  headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { color: colors.text, fontSize: 20, fontWeight: '700' },
+  sub: { color: colors.textFaint, fontSize: 12, marginTop: 2 },
+  errBox: { marginTop: spacing.m, padding: spacing.m, borderRadius: radius.s, borderWidth: 1 },
+  errText: { fontSize: 12, lineHeight: 17 },
+  rowHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  appRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, flex: 1 },
+  app: { color: colors.text, fontSize: 14, fontWeight: '600', flex: 1 },
+  seen: { color: colors.textFaint, fontSize: 11, marginTop: spacing.s },
+  actRow: { flexDirection: 'row', gap: spacing.s, marginTop: spacing.m },
+}));

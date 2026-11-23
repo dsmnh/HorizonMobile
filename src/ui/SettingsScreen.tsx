@@ -1,11 +1,12 @@
 /**
- * 设置屏（迁移适配指南 §SettingsScreen）：本地偏好、缓存管理与账号绑定身份查询。
+ * 设置屏（迁移适配指南 §SettingsScreen）：外观主题、本地偏好、TLS 证书信任与账号绑定身份。
  * account.uuids 返回当前账号绑定的 UUID 与可选玩家名（契约 1.6.0 §8.7）。
  */
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors } from './theme';
+import { colors, spacing, themedStyles, useTheme } from './theme';
+import { Card, Chip, GhostButton, SectionLabel, Segmented, SettingsGroup, SettingsRow } from './components';
 import { HorizonConn, type Res } from '../net/conn';
 import { pinKey } from '../net/tls-pin';
 import { loadLastConn } from './lastConn';
@@ -20,6 +21,7 @@ export interface SettingsScreenProps {
 }
 
 export function SettingsScreen({ conn }: SettingsScreenProps): JSX.Element {
+  const { mode, setMode, colors: c } = useTheme();
   const [msg, setMsg] = useState('');
   const [identities, setIdentities] = useState<Identity[]>([]);
   const [lastConn, setLastConn] = useState<{ host: string; port: number } | null>(null);
@@ -75,64 +77,77 @@ export function SettingsScreen({ conn }: SettingsScreenProps): JSX.Element {
   };
 
   return (
-    <View style={styles.card}>
+    <View style={styles.wrap}>
       <Text style={styles.title}>设置</Text>
-      <Pressable style={styles.btn} onPress={() => void clearConn()}>
-        <Text style={styles.btnText}>清除上次连接信息</Text>
-      </Pressable>
+      <Text style={styles.sub}>外观、证书信任与账号绑定</Text>
 
-      <Text style={styles.sectionLabel}>TLS 证书信任（首次连接信任）</Text>
-      <Pressable style={styles.btnOutline} onPress={() => void resetPin()}>
-        <Text style={styles.btnOutlineText}>重置已信任证书</Text>
-      </Pressable>
-      <Text style={styles.note}>
-        重置后下次连接会重新记录服务端证书指纹；服务端使用自有证书时同样按首次连接记录。
-        证书更换或切换到另一后端时使用。
-      </Text>
+      <SectionLabel text="外观" />
+      <Card>
+        <Segmented
+          options={[
+            { value: 'dark', label: '深空（深色）', icon: 'moon' },
+            { value: 'light', label: '日间（浅色）', icon: 'sunny' },
+          ]}
+          value={mode}
+          onChange={setMode}
+        />
+        <Text style={styles.hint}>
+          配色与 AEMobileApp 基线一致：深色为深空底 + 青/紫双强调色；切换后全应用即时生效。
+        </Text>
+      </Card>
 
-      <Text style={styles.sectionLabel}>账号绑定身份（account.uuids）</Text>
-      <Pressable style={styles.btnOutline} disabled={!conn} onPress={() => void loadIdentities()}>
-        <Text style={styles.btnOutlineText}>查询绑定身份</Text>
-      </Pressable>
-      {identities.map((id) => (
-        <View key={id.uuid} style={styles.idRow}>
-          <Text style={styles.idText} numberOfLines={1}>
-            {id.name ? `${id.name} · ${id.uuid}` : id.uuid}
-          </Text>
+      <SectionLabel text="TLS 证书信任" />
+      <SettingsGroup footnote="重置后下次连接会重新记录服务端证书指纹；服务端使用自有证书时同样按首次连接记录。证书更换或切换到另一后端时使用。">
+        <SettingsRow
+          icon="shield-checkmark-outline"
+          label="重置已信任证书"
+          detail={lastConn ? `${lastConn.host}:${lastConn.port}` : '暂无上次连接'}
+          onPress={() => void resetPin()}
+        />
+        <SettingsRow icon="trash-outline" label="清除上次连接信息" divider={false} tone="bad" onPress={() => void clearConn()} />
+      </SettingsGroup>
+
+      <SectionLabel text="账号绑定身份" right={<Chip label="account.uuids" tone="accent2" />} />
+      <SettingsGroup>
+        <SettingsRow
+          icon="link-outline"
+          label="查询绑定身份"
+          detail={conn ? '从后端读取当前账号的 UUID 列表' : '未连接后端'}
+          divider={identities.length > 0}
+          disabled={!conn}
+          onPress={() => void loadIdentities()}
+        />
+        {identities.map((id, i) => (
+          <SettingsRow
+            key={id.uuid}
+            icon="person-outline"
+            label={id.name ?? '未命名身份'}
+            detail={id.uuid}
+            divider={i < identities.length - 1}
+          />
+        ))}
+      </SettingsGroup>
+
+      {msg !== '' && (
+        <View style={styles.msgBox}>
+          <Text style={[styles.msg, { color: c.ok }]}>{msg}</Text>
         </View>
-      ))}
-      {msg !== '' && <Text style={styles.msg}>{msg}</Text>}
-      <Text style={styles.note}>
-        监控轮询开关与 rank.sync / admin.opSet 位于监控屏；重设密码在登录屏。
-      </Text>
+      )}
+
+      <SectionLabel text="其它入口" />
+      <SettingsGroup>
+        <SettingsRow icon="pulse-outline" label="监控轮询 / rank.sync / admin.opSet" detail="位于监控屏" divider />
+        <SettingsRow icon="key-outline" label="重设密码" detail="位于登录屏（恢复码）" divider={false} />
+      </SettingsGroup>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 14 },
-  title: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  sectionLabel: { color: colors.faint, fontSize: 11, marginTop: 16 },
-  btn: {
-    borderWidth: 1,
-    borderColor: colors.danger,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  btnText: { color: colors.danger, fontSize: 14, fontWeight: '600' },
-  btnOutline: {
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: 8,
-    paddingVertical: 10,
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  btnOutlineText: { color: colors.primaryText, fontSize: 13 },
-  idRow: { backgroundColor: colors.card, borderRadius: 8, padding: 10, marginTop: 6 },
-  idText: { color: colors.text, fontSize: 12 },
-  msg: { color: colors.ok, fontSize: 12, marginTop: 8 },
-  note: { color: colors.faint, fontSize: 12, marginTop: 12, lineHeight: 18 },
-});
+const styles = themedStyles(() => ({
+  wrap: { width: '100%', maxWidth: 520, alignSelf: 'center' },
+  title: { color: colors.text, fontSize: 20, fontWeight: '700' },
+  sub: { color: colors.textFaint, fontSize: 12, marginTop: 2 },
+  hint: { color: colors.textFaint, fontSize: 11, lineHeight: 17, marginTop: spacing.m },
+  msgBox: { marginBottom: spacing.l },
+  msg: { fontSize: 12, lineHeight: 17 },
+}));

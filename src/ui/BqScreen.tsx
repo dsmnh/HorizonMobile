@@ -2,10 +2,12 @@
  * BQ 覆盖同步屏（契约 1.5.0 §8.4）：一次一个队伍、来源服 → 目标服。
  * 覆盖会改写目标服存档，发起前二次确认并显示来源/目标；覆盖前由目标节点自动备份，
  * 失败不自动重试，需人工重新发起。
+ * 视觉对齐 AEMobileApp：警告条 + 表单卡 + 危险动作按钮。
  */
 import React, { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors } from './theme';
+import { Alert, ScrollView, Text, View } from 'react-native';
+import { colors, radius, spacing, themedStyles } from './theme';
+import { Card, Chip, FieldLabel, PrimaryButton, SectionLabel, StyledInput } from './components';
 import { HorizonConn, type Res } from '../net/conn';
 
 export interface BqScreenProps {
@@ -55,57 +57,62 @@ export function BqScreen({ conn }: BqScreenProps): JSX.Element {
   };
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>BQ 覆盖同步</Text>
-      <Text style={styles.warning}>
-        覆盖会改写目标服的 BetterQuesting 队伍进度，属不可撤销操作。
-      </Text>
+    <ScrollView style={styles.wrap} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
+      <View style={styles.headRow}>
+        <View>
+          <Text style={styles.title}>BQ 覆盖同步</Text>
+          <Text style={styles.sub}>BetterQuesting 队伍进度跨服覆盖</Text>
+        </View>
+        <Chip label="不可撤销" tone="bad" />
+      </View>
 
-      <Text style={styles.label}>队伍 ID</Text>
-      <TextInput style={styles.input} value={teamId} onChangeText={setTeamId}
-        keyboardType="number-pad" placeholder="中央队伍 ID" placeholderTextColor={colors.faint} editable={!busy} />
+      <View style={[styles.warnBox, { backgroundColor: colors.warnSoft, borderColor: colors.warn + '66' }]}>
+        <Text style={[styles.warnText, { color: colors.warn }]}>
+          覆盖会改写目标服的 BetterQuesting 队伍进度，覆盖前由目标节点自动备份。
+        </Text>
+      </View>
 
-      <Text style={styles.label}>来源节点 ID</Text>
-      <TextInput style={styles.input} value={source} onChangeText={setSource}
-        keyboardType="number-pad" placeholder="从这里读取进度" placeholderTextColor={colors.faint} editable={!busy} />
+      <SectionLabel text="同步参数" right={<Chip label="bq.sync.start" tone="accent2" />} />
+      <Card>
+        <FieldLabel text="队伍 ID" />
+        <StyledInput value={teamId} onChangeText={setTeamId} keyboardType="number-pad"
+          placeholder="中央队伍 ID" editable={!busy} />
 
-      <Text style={styles.label}>目标节点 ID</Text>
-      <TextInput style={styles.input} value={target} onChangeText={setTarget}
-        keyboardType="number-pad" placeholder="覆盖到这里" placeholderTextColor={colors.faint} editable={!busy} />
+        <FieldLabel text="来源节点 ID" />
+        <StyledInput value={source} onChangeText={setSource} keyboardType="number-pad"
+          placeholder="从这里读取进度" editable={!busy} />
 
-      <Pressable style={[styles.btn, busy && styles.disabled]} disabled={busy} onPress={confirm}>
-        <Text style={styles.btnText}>同步（需二次确认）</Text>
-      </Pressable>
-      {msg !== '' && <Text style={styles.msg}>{msg}</Text>}
+        <FieldLabel text="目标节点 ID" />
+        <StyledInput value={target} onChangeText={setTarget} keyboardType="number-pad"
+          placeholder="覆盖到这里" editable={!busy} />
+
+        <View style={{ marginTop: spacing.l }}>
+          <PrimaryButton label="同步（需二次确认）" icon="swap-horizontal" tone="bad"
+            loading={busy} disabled={busy} onPress={confirm} />
+        </View>
+      </Card>
+
+      {msg !== '' && (
+        <View style={[styles.msgBox, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+          <Text style={styles.msgText}>{msg}</Text>
+        </View>
+      )}
+
       <Text style={styles.note}>
         需要服主或超管账号；节点离线时操作入队，节点上线后执行。
       </Text>
-    </View>
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 14 },
-  title: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  warning: { color: colors.warn, fontSize: 12, marginTop: 8, lineHeight: 18 },
-  label: { color: colors.muted, fontSize: 12, marginTop: 12, marginBottom: 6 },
-  input: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.text,
-    fontSize: 14,
-  },
-  btn: {
-    backgroundColor: colors.danger,
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  btnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  disabled: { opacity: 0.5 },
-  msg: { color: colors.muted, fontSize: 12, marginTop: 8 },
-  note: { color: colors.faint, fontSize: 11, marginTop: 12, lineHeight: 17 },
-});
+const styles = themedStyles(() => ({
+  wrap: { flex: 1, paddingHorizontal: spacing.l, paddingTop: spacing.m },
+  headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { color: colors.text, fontSize: 20, fontWeight: '700' },
+  sub: { color: colors.textFaint, fontSize: 12, marginTop: 2 },
+  warnBox: { marginTop: spacing.m, padding: spacing.m, borderRadius: radius.s, borderWidth: 1 },
+  warnText: { fontSize: 12, lineHeight: 18 },
+  msgBox: { marginTop: spacing.m, padding: spacing.m, borderRadius: radius.s, borderWidth: 1 },
+  msgText: { color: colors.textDim, fontSize: 12, lineHeight: 18 },
+  note: { color: colors.textFaint, fontSize: 11, marginTop: spacing.m, lineHeight: 17 },
+}));

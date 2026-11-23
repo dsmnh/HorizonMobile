@@ -3,10 +3,15 @@
  * 另提供 rank.sync（每 UUID 每日一次）与 admin.opSet（服主/超管）入口。
  * 权限：super/owner（契约 1.6.0）；普通账号展示后端的结构化拒绝。
  * MSPT/TPS 由服务端 TickMonitor 5s 窗口采集（HorizonModServer）。
+ * 视觉对齐 AEMobileApp：节点卡 + 状态点 + TPS 进度条 + 分组设置行。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors } from './theme';
+import { ScrollView, Text, View } from 'react-native';
+import { colors, radius, spacing, themedStyles } from './theme';
+import {
+  Card, Chip, EmptyState, GhostButton, PrimaryButton, ProgressBar,
+  SectionLabel, SettingsGroup, SettingsRow, StatusDot, StyledInput,
+} from './components';
 import { HorizonConn, type Res } from '../net/conn';
 
 interface NodeFrame {
@@ -81,134 +86,129 @@ export function MonitorScreen({ conn, uuid = '' }: MonitorScreenProps): JSX.Elem
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conn, polling]);
 
+  const online = nodes.filter((n) => !n.offline && !!n.frame);
+
   return (
-    <View style={styles.card}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>网络监控</Text>
-        <Pressable style={styles.toggleBtn} onPress={() => setPolling((v) => !v)}>
-          <Text style={styles.toggleText}>{polling ? '暂停轮询' : '恢复轮询'}</Text>
-        </Pressable>
-      </View>
-
-      {error !== '' && <Text style={styles.error}>{error}</Text>}
-      {nodes.length === 0 && error === '' && <Text style={styles.empty}>网络内暂无活跃节点。</Text>}
-
-      <Text style={styles.sectionLabel}>在线榜同步（rank.sync，每日每 UUID 一次；超管/服主）</Text>
-      <View style={styles.syncRow}>
-        <TextInput
-          style={styles.syncInput}
-          value={syncNodeId}
-          onChangeText={setSyncNodeId}
-          placeholder="节点 ID"
-          placeholderTextColor={colors.faint}
-          keyboardType="number-pad"
-        />
-        <Pressable style={styles.syncBtn} disabled={!syncNodeId.trim() || !uuid}
-          onPress={() => {
-            setSyncMsg('');
-            void conn.req('rank.sync', { uuid, nodeId: Number(syncNodeId) }).then((res) => {
-              setSyncMsg(res.ok ? '已排队（queued）' : `rank.sync: ${res.m ?? '失败'}`);
-            }).catch((e: any) => setSyncMsg(String(e.message ?? e)));
-          }}>
-          <Text style={styles.syncBtnText}>同步到本服</Text>
-        </Pressable>
-      </View>
-      {syncMsg !== '' && <Text style={styles.syncMsg}>{syncMsg}</Text>}
-
-      <Text style={styles.sectionLabel}>玩家 OP 管理（admin.opSet，服主/超管）</Text>
-      <View style={styles.syncRow}>
-        <TextInput
-          style={[styles.syncInput, styles.wideInput]}
-          value={opTarget}
-          onChangeText={setOpTarget}
-          placeholder="目标玩家 UUID"
-          placeholderTextColor={colors.faint}
-          autoCapitalize="none"
-        />
-        <TextInput
-          style={styles.syncInput}
-          value={opNodeId}
-          onChangeText={setOpNodeId}
-          placeholder="节点 ID"
-          placeholderTextColor={colors.faint}
-          keyboardType="number-pad"
-        />
-      </View>
-      <View style={styles.syncRow}>
-        <Pressable style={styles.syncBtn} disabled={!opTarget.trim() || !opNodeId.trim()}
-          onPress={() => void applyOpSet(true)}>
-          <Text style={styles.syncBtnText}>授予 OP</Text>
-        </Pressable>
-        <Pressable style={styles.syncBtn} disabled={!opTarget.trim() || !opNodeId.trim()}
-          onPress={() => void applyOpSet(false)}>
-          <Text style={styles.syncBtnText}>撤销 OP</Text>
-        </Pressable>
-      </View>
-      {opMsg !== '' && <Text style={styles.syncMsg}>{opMsg}</Text>}
-
-      {nodes.map((n) => (
-        <View key={n.nodeId} style={styles.nodeCard}>
-          <View style={styles.nodeHeader}>
-            <Text style={styles.nodeName}>{n.name ?? `节点 ${n.nodeId}`}</Text>
-            {n.offline || !n.frame ? (
-              <Text style={styles.offline}>离线/无帧</Text>
-            ) : (
-              <Text style={styles.online}>在线</Text>
-            )}
-          </View>
-          {n.frame && !n.offline && (
-            <>
-              <Text style={styles.metrics}>
-                TPS {n.frame.tps.toFixed(1)} ｜ MSPT {n.frame.mspt.toFixed(1)}
-                {n.frame.max != null ? `（峰值 ${n.frame.max.toFixed(1)}）` : ''} ｜ 玩家 {n.frame.players}
-              </Text>
-              {(n.frame.dims ?? []).filter((d) => d.players > 0).map((d) => (
-                <Text key={d.id} style={styles.dim}>
-                  维度 {d.id}：{d.players} 人，MSPT {d.mspt.toFixed(2)}
-                </Text>
-              ))}
-            </>
-          )}
+    <ScrollView style={styles.wrap} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
+      <View style={styles.headRow}>
+        <View>
+          <Text style={styles.title}>网络监控</Text>
+          <Text style={styles.sub}>在线节点 {online.length} / 共 {nodes.length}</Text>
         </View>
-      ))}
-    </View>
+        <GhostButton
+          label={polling ? '暂停轮询' : '恢复轮询'}
+          icon={polling ? 'pause' : 'play'}
+          tone="neutral"
+          onPress={() => setPolling((v) => !v)}
+        />
+      </View>
+
+      {error !== '' && (
+        <View style={[styles.errBox, { backgroundColor: colors.badSoft, borderColor: colors.bad + '55' }]}>
+          <Text style={[styles.errText, { color: colors.bad }]}>{error}</Text>
+        </View>
+      )}
+
+      {nodes.length === 0 && error === '' && (
+        <EmptyState icon="pulse-outline" title="网络内暂无活跃节点" subtitle="节点连上后端后会自动出现在这里" />
+      )}
+
+      {nodes.map((n) => {
+        const live = !n.offline && !!n.frame;
+        const tps = n.frame?.tps ?? 0;
+        const ratio = Math.max(0, Math.min(1, tps / 20));
+        return (
+          <Card key={n.nodeId} style={{ marginTop: spacing.m }}>
+            <View style={styles.nodeHead}>
+              <View style={styles.nodeTitleRow}>
+                <StatusDot ok={live} />
+                <Text style={styles.nodeName}>{n.name ?? `节点 ${n.nodeId}`}</Text>
+              </View>
+              <Chip label={live ? '在线' : '离线'} tone={live ? 'ok' : 'warn'} />
+            </View>
+            {live && n.frame && (
+              <>
+                <View style={styles.metricRow}>
+                  <Text style={styles.metricLabel}>TPS</Text>
+                  <Text style={[styles.metricValue, { color: ratio > 0.9 ? colors.ok : colors.warn }]}>
+                    {n.frame.tps.toFixed(1)}
+                  </Text>
+                  <Text style={styles.metricLabel}>MSPT</Text>
+                  <Text style={styles.metricValue}>{n.frame.mspt.toFixed(1)}</Text>
+                  <Text style={styles.metricLabel}>玩家</Text>
+                  <Text style={styles.metricValue}>{n.frame.players}</Text>
+                </View>
+                <View style={{ marginTop: spacing.s }}>
+                  <ProgressBar ratio={ratio} tone={ratio > 0.9 ? 'ok' : 'warn'} />
+                </View>
+                {n.frame.max != null && (
+                  <Text style={styles.peak}>MSPT 峰值 {n.frame.max.toFixed(1)}</Text>
+                )}
+                {(n.frame.dims ?? []).filter((d) => d.players > 0).map((d) => (
+                  <View key={d.id} style={styles.dimRow}>
+                    <Text style={styles.dimText}>维度 {d.id}</Text>
+                    <Text style={styles.dimMeta}>{d.players} 人 ｜ MSPT {d.mspt.toFixed(2)}</Text>
+                  </View>
+                ))}
+              </>
+            )}
+          </Card>
+        );
+      })}
+
+      <SectionLabel text="在线榜同步" right={<Chip label="rank.sync" tone="accent2" />} />
+      <Card>
+        <Text style={styles.hint}>每 UUID 每日一次，需超管/服主权限。</Text>
+        <View style={styles.row}>
+          <StyledInput value={syncNodeId} onChangeText={setSyncNodeId} placeholder="节点 ID" keyboardType="number-pad" style={{ flex: 1 }} />
+          <PrimaryButton
+            label="同步到本服"
+            icon="sync"
+            disabled={syncNodeId.trim() === '' || uuid === ''}
+            onPress={() => {
+              setSyncMsg('');
+              void conn.req('rank.sync', { uuid, nodeId: Number(syncNodeId) }).then((res) => {
+                setSyncMsg(res.ok ? '已排队（queued）' : `rank.sync: ${res.m ?? '失败'}`);
+              }).catch((e: any) => setSyncMsg(String(e.message ?? e)));
+            }}
+          />
+        </View>
+        {syncMsg !== '' && <Text style={styles.okText}>{syncMsg}</Text>}
+      </Card>
+
+      <SectionLabel text="玩家 OP 管理" right={<Chip label="admin.opSet" tone="accent2" />} />
+      <Card>
+        <Text style={styles.hint}>目标需在线；离线或非法 UUID 由节点侧拒绝。</Text>
+        <StyledInput value={opTarget} onChangeText={setOpTarget} placeholder="目标玩家 UUID" />
+        <View style={[styles.row, { marginTop: spacing.s }]}>
+          <StyledInput value={opNodeId} onChangeText={setOpNodeId} placeholder="节点 ID" keyboardType="number-pad" style={{ flex: 1 }} />
+          <GhostButton label="授予" icon="shield-checkmark-outline" disabled={opTarget.trim() === '' || opNodeId.trim() === ''} onPress={() => void applyOpSet(true)} />
+          <GhostButton label="撤销" icon="shield-outline" tone="bad" disabled={opTarget.trim() === '' || opNodeId.trim() === ''} onPress={() => void applyOpSet(false)} />
+        </View>
+        {opMsg !== '' && <Text style={styles.okText}>{opMsg}</Text>}
+      </Card>
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 18 },
-  sectionLabel: { color: colors.faint, fontSize: 11, marginTop: 14 },
-  syncRow: { flexDirection: 'row', gap: 6, marginTop: 6, alignItems: 'center' },
-  syncInput: {
-    width: 90,
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: colors.text,
-    fontSize: 13,
-  },
-  wideInput: { width: 'auto', flex: 1 },
-  syncBtn: { borderWidth: 1, borderColor: colors.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9 },
-  syncBtnText: { color: colors.primaryText, fontSize: 12 },
-  syncMsg: { color: colors.ok, fontSize: 12, marginTop: 6 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  toggleBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.primary },
-  toggleText: { color: colors.primaryText, fontSize: 12 },
-  error: { color: colors.danger, fontSize: 13, marginTop: 8 },
-  empty: { color: colors.faint, fontSize: 13, marginTop: 10 },
-  nodeCard: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginTop: 8,
-  },
-  nodeHeader: { flexDirection: 'row', justifyContent: 'space-between' },
-  nodeName: { color: colors.text, fontSize: 15 },
-  online: { color: colors.ok, fontSize: 12 },
-  offline: { color: colors.warn, fontSize: 12 },
-  metrics: { color: colors.muted, fontSize: 13, marginTop: 6 },
-  dim: { color: colors.faint, fontSize: 11, marginTop: 3 },
-});
+const styles = themedStyles(() => ({
+  wrap: { flex: 1, paddingHorizontal: spacing.l, paddingTop: spacing.m },
+  headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { color: colors.text, fontSize: 20, fontWeight: '700' },
+  sub: { color: colors.textFaint, fontSize: 12, marginTop: 2 },
+  errBox: { marginTop: spacing.m, padding: spacing.m, borderRadius: radius.s, borderWidth: 1 },
+  errText: { fontSize: 12, lineHeight: 17 },
+  nodeHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  nodeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.s },
+  nodeName: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  metricRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.s, marginTop: spacing.m, flexWrap: 'wrap' },
+  metricLabel: { color: colors.textFaint, fontSize: 11 },
+  metricValue: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  peak: { color: colors.textFaint, fontSize: 11, marginTop: spacing.s },
+  dimRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing.s },
+  dimText: { color: colors.textDim, fontSize: 12 },
+  dimMeta: { color: colors.textFaint, fontSize: 11 },
+  hint: { color: colors.textFaint, fontSize: 11, marginBottom: spacing.s },
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.s },
+  okText: { color: colors.ok, fontSize: 12, marginTop: spacing.s },
+}));

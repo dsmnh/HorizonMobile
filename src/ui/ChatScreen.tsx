@@ -3,10 +3,12 @@
  * 协议面：chat.history（scope: public|private + peer）、chat.public.send / chat.private.send、
  * friend.request/remove/accept、block.set（契约 1.4.0 §聊天域）。
  * 私聊事件按发送/接收双方过滤；发送者回显经流送达，UI 不双份追加。
+ * 视觉对齐 AEMobileApp：频道分段器 + 气泡列表 + 底部输入条。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors } from './theme';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { colors, radius, spacing, themedStyles, useTheme } from './theme';
+import { Card, Chip, EmptyState, GhostButton, PrimaryButton, SectionLabel, Segmented, StyledInput } from './components';
 import { HorizonConn, type Stream, type TeamEvent } from '../net/conn';
 import { fromEvent, fromHistory, isRelevant } from '../net/chat-merge';
 
@@ -23,6 +25,7 @@ export interface ChatScreenProps {
 }
 
 export function ChatScreen({ conn, uuid }: ChatScreenProps): JSX.Element {
+  const { colors: c } = useTheme();
   const [scope, setScope] = useState<'public' | 'private'>('public');
   const [peer, setPeer] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -116,163 +119,113 @@ export function ChatScreen({ conn, uuid }: ChatScreenProps): JSX.Element {
     }
   };
 
+  const canOp = friendOp.trim() !== '';
+
   return (
-    <View style={styles.card}>
-      <View style={styles.headerRow}>
-        <View style={styles.scopeRow}>
-          <Pressable style={[styles.scopeBtn, scope === 'public' && styles.scopeBtnOn]}
-            onPress={() => { setScope('public'); void loadHistory('public', ''); }}>
-            <Text style={[styles.scopeText, scope === 'public' && styles.scopeTextOn]}>公开</Text>
-          </Pressable>
-          <Pressable style={[styles.scopeBtn, scope === 'private' && styles.scopeBtnOn]}
-            onPress={() => { setScope('private'); void loadHistory('private', peer); }}>
-            <Text style={[styles.scopeText, scope === 'private' && styles.scopeTextOn]}>私聊</Text>
-          </Pressable>
-        </View>
-        <Pressable style={styles.refreshBtn} onPress={() => void loadHistory(scope, peer)}>
-          <Text style={styles.refreshText}>历史</Text>
-        </Pressable>
+    <View style={styles.wrap}>
+      <View style={styles.headRow}>
+        <Segmented
+          options={[
+            { value: 'public', label: '公聊', icon: 'globe-outline' },
+            { value: 'private', label: '私聊', icon: 'lock-closed-outline' },
+          ]}
+          value={scope}
+          onChange={(v) => { setScope(v); void loadHistory(v, peer); }}
+        />
       </View>
 
       {scope === 'private' && (
-        <TextInput
-          style={styles.peerInput}
-          value={peer}
-          onChangeText={setPeer}
-          placeholder="对方 UUID"
-          placeholderTextColor={colors.faint}
-          autoCapitalize="none"
-          onSubmitEditing={() => void loadHistory('private', peer)}
-        />
+        <View style={{ marginTop: spacing.s }}>
+          <StyledInput
+            value={peer}
+            onChangeText={setPeer}
+            placeholder="对方 UUID"
+            onSubmitEditing={() => void loadHistory('private', peer)}
+          />
+        </View>
       )}
 
-      {error !== '' && <Text style={styles.error}>{error}</Text>}
-      {okMsg !== '' && <Text style={styles.ok}>{okMsg}</Text>}
+      {error !== '' && (
+        <View style={[styles.msgBox, { backgroundColor: c.badSoft, borderColor: c.bad + '55' }]}>
+          <Text style={[styles.msgText, { color: c.bad }]}>{error}</Text>
+        </View>
+      )}
+      {okMsg !== '' && (
+        <View style={[styles.msgBox, { backgroundColor: c.okSoft, borderColor: c.ok + '55' }]}>
+          <Text style={[styles.msgText, { color: c.ok }]}>{okMsg}</Text>
+        </View>
+      )}
 
-      <FlatList
-        ref={listRef}
-        data={messages}
-        keyExtractor={(m) => String(m.mid)}
-        style={styles.list}
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-        renderItem={({ item }) => (
-          <View style={styles.msgRow}>
-            <Text style={styles.msgFrom} numberOfLines={1}>{item.from}</Text>
-            <Text style={styles.msgText}>{item.text}</Text>
-          </View>
-        )}
-        ListEmptyComponent={<Text style={styles.empty}>{scope === 'private' ? '与该 UUID 暂无私聊。' : '暂无消息。'}</Text>}
-      />
+      <Card style={styles.listCard}>
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(m) => String(m.mid)}
+          style={styles.list}
+          contentContainerStyle={{ paddingBottom: spacing.s }}
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+          renderItem={({ item }) => (
+            <View style={[styles.bubble, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}>
+              <Text style={styles.bubbleFrom} numberOfLines={1}>{item.from}</Text>
+              <Text style={styles.bubbleText}>{item.text}</Text>
+            </View>
+          )}
+          ListEmptyComponent={
+            <EmptyState
+              icon="chatbubble-ellipses-outline"
+              title={scope === 'private' ? '暂无该会话消息' : '暂无消息'}
+              subtitle={scope === 'private' ? '填写对方 UUID 后拉取历史' : '在下方输入框发送第一条公聊'}
+            />
+          }
+        />
+      </Card>
 
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
+      <View style={styles.sendRow}>
+        <StyledInput
           value={draft}
           onChangeText={setDraft}
           placeholder={scope === 'private' ? '私聊发送…' : '发送到公共频道…'}
-          placeholderTextColor={colors.faint}
           editable={!sending}
-          onSubmitEditing={() => void send()}
+          style={{ flex: 1 }}
         />
-        <Pressable style={[styles.sendBtn, sending && styles.disabled]} disabled={sending}
-          onPress={() => void send()}>
-          <Text style={styles.sendText}>发送</Text>
-        </Pressable>
+        <PrimaryButton label="发送" icon="send" onPress={() => void send()} loading={sending} />
       </View>
 
-      <View style={styles.socialRow}>
-        <TextInput style={styles.socialInput} value={friendOp} onChangeText={setFriendOp}
-          placeholder="UUID（好友/屏蔽）" placeholderTextColor={colors.faint} autoCapitalize="none" />
-        <Pressable style={styles.miniBtn} disabled={!friendOp.trim()}
-          onPress={() => void friendAction('friend.request', { to: friendOp.trim() }, '好友请求已发送')}>
-          <Text style={styles.miniText}>加好友</Text>
-        </Pressable>
-        <Pressable style={styles.miniBtn} disabled={!friendOp.trim()}
-          onPress={() => void friendAction('friend.remove', { target: friendOp.trim() }, '已移除好友')}>
-          <Text style={styles.miniText}>删好友</Text>
-        </Pressable>
-        <Pressable style={styles.miniBtnDanger} disabled={!friendOp.trim()}
-          onPress={() => void friendAction('block.set', { target: friendOp.trim(), blocked: true }, '已屏蔽')}>
-          <Text style={styles.miniText}>屏蔽</Text>
-        </Pressable>
-        <Pressable style={styles.miniBtn} disabled={!friendOp.trim()}
-          onPress={() => void friendAction('block.set', { target: friendOp.trim(), blocked: false }, '已取消屏蔽')}>
-          <Text style={styles.miniText}>解除</Text>
-        </Pressable>
-      </View>
-      <View style={styles.socialRow}>
-        <TextInput style={styles.socialInput} value={requestId} onChangeText={setRequestId}
-          placeholder="好友请求 ID（接受）" placeholderTextColor={colors.faint} />
-        <Pressable style={styles.miniBtn} disabled={!requestId.trim()}
-          onPress={() => void friendAction('friend.accept', { requestId: Number(requestId) }, '已接受好友请求')}>
-          <Text style={styles.miniText}>接受好友</Text>
-        </Pressable>
-      </View>
+      <SectionLabel text="好友与屏蔽" right={<Chip label={scope === 'private' ? '私聊' : '公聊'} tone="accent2" />} />
+      <Card>
+        <StyledInput value={friendOp} onChangeText={setFriendOp} placeholder="目标玩家 UUID" />
+        <View style={styles.chipRow}>
+          <GhostButton label="加好友" icon="person-add-outline" disabled={!canOp}
+            onPress={() => void friendAction('friend.request', { to: friendOp.trim() }, '好友请求已发送')} />
+          <GhostButton label="删好友" icon="person-remove-outline" tone="neutral" disabled={!canOp}
+            onPress={() => void friendAction('friend.remove', { target: friendOp.trim() }, '已移除好友')} />
+          <GhostButton label="屏蔽" icon="ban-outline" tone="bad" disabled={!canOp}
+            onPress={() => void friendAction('block.set', { target: friendOp.trim(), blocked: true }, '已屏蔽')} />
+          <GhostButton label="解除" icon="checkmark-circle-outline" tone="neutral" disabled={!canOp}
+            onPress={() => void friendAction('block.set', { target: friendOp.trim(), blocked: false }, '已取消屏蔽')} />
+        </View>
+        <View style={{ marginTop: spacing.m }}>
+          <StyledInput value={requestId} onChangeText={setRequestId} placeholder="好友请求 ID（接受）" />
+        </View>
+        <View style={{ marginTop: spacing.s }}>
+          <GhostButton label="接受好友请求" icon="checkmark-done-outline" disabled={requestId.trim() === ''}
+            onPress={() => void friendAction('friend.accept', { requestId: Number(requestId) }, '已接受好友请求')} />
+        </View>
+      </Card>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  card: { width: '100%', maxWidth: 420, alignSelf: 'center', flex: 1, maxHeight: 620 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  scopeRow: { flexDirection: 'row', gap: 6 },
-  scopeBtn: { borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: colors.primary },
-  scopeBtnOn: { backgroundColor: colors.primary },
-  scopeText: { color: colors.primaryText, fontSize: 13 },
-  scopeTextOn: { color: '#FFFFFF' },
-  refreshBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: colors.primary },
-  refreshText: { color: colors.primaryText, fontSize: 12 },
-  peerInput: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    color: colors.text,
-    fontSize: 13,
-    marginTop: 8,
-  },
-  error: { color: colors.danger, fontSize: 13, marginTop: 8 },
-  ok: { color: colors.ok, fontSize: 13, marginTop: 8 },
-  list: { marginTop: 10, flexGrow: 0 },
-  msgRow: {
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginTop: 6,
-  },
-  msgFrom: { color: colors.muted, fontSize: 11 },
-  msgText: { color: colors.text, fontSize: 14, marginTop: 2 },
-  empty: { color: colors.faint, fontSize: 13, marginTop: 10 },
-  inputRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  input: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.text,
-    fontSize: 15,
-  },
-  sendBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
-  },
-  sendText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  disabled: { opacity: 0.5 },
-  socialRow: { flexDirection: 'row', gap: 6, marginTop: 8, alignItems: 'center' },
-  socialInput: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: colors.text,
-    fontSize: 12,
-  },
-  miniBtn: { borderWidth: 1, borderColor: colors.primary, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6 },
-  miniBtnDanger: { borderWidth: 1, borderColor: colors.danger, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 6 },
-  miniText: { color: colors.primaryText, fontSize: 11 },
-});
+const styles = themedStyles(() => ({
+  wrap: { flex: 1, padding: spacing.l },
+  headRow: { marginBottom: spacing.s },
+  msgBox: { marginTop: spacing.s, padding: spacing.m, borderRadius: radius.s, borderWidth: 1 },
+  msgText: { fontSize: 12, lineHeight: 17 },
+  listCard: { flex: 1, marginTop: spacing.s, padding: spacing.s },
+  list: { flexGrow: 1 },
+  bubble: { borderRadius: radius.m, borderWidth: 1, paddingVertical: 8, paddingHorizontal: spacing.m, marginBottom: 6 },
+  bubbleFrom: { color: colors.textFaint, fontSize: 10 },
+  bubbleText: { color: colors.text, fontSize: 14, marginTop: 2, lineHeight: 20 },
+  sendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, marginTop: spacing.s },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s, marginTop: spacing.s },
+}));

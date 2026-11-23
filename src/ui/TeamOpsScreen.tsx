@@ -2,10 +2,12 @@
  * 队伍操作屏（迁移适配指南 §TeamScreen 操作子集）：常用队伍域 REQ 动作。
  * 覆盖 create/info/leave/disband/setJoinMode；邀请、申请、审批与角色/转让等
  * 需要目标输入的动作在成员与审批屏（TeamRosterScreen）完成，全 15 个队伍 op 已覆盖。
+ * 视觉对齐 AEMobileApp：分组卡 + 危险动作独立分组。
  */
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors } from './theme';
+import { ScrollView, Text, View } from 'react-native';
+import { colors, radius, spacing, themedStyles } from './theme';
+import { Card, Chip, GhostButton, PrimaryButton, SectionLabel, StyledInput } from './components';
 import { HorizonConn, type Res } from '../net/conn';
 
 export interface TeamOpsScreenProps {
@@ -41,93 +43,76 @@ export function TeamOpsScreen({ conn, uuid, onChanged }: TeamOpsScreenProps): JS
   };
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.title}>队伍操作</Text>
-      <View style={styles.row}>
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder="新队伍名"
-          placeholderTextColor="#5A6B8C"
-          editable={!busy}
-        />
-        <Pressable style={[styles.btn, busy && styles.disabled]} disabled={busy}
-          onPress={() => void run('team.create', { name: name.trim() }, '已创建')}>
-          <Text style={styles.btnText}>创建</Text>
-        </Pressable>
+    <ScrollView style={styles.wrap} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
+      <View style={styles.headRow}>
+        <View>
+          <Text style={styles.title}>队伍操作</Text>
+          <Text style={styles.sub}>创建、退出、解散与加入方式</Text>
+        </View>
+        <Chip label="team.*" tone="accent2" />
       </View>
 
-      <View style={styles.row}>
-        <Pressable style={[styles.btn2, busy && styles.disabled]} disabled={busy}
-          onPress={() => void run('team.info', {}, '详情已显示于列表')}>
-          <Text style={styles.btn2Text}>info</Text>
-        </Pressable>
-        <Pressable style={[styles.btn2, busy && styles.disabled]} disabled={busy}
-          onPress={() => void run('team.leave', {}, '已退出')}>
-          <Text style={styles.btn2Text}>leave</Text>
-        </Pressable>
-        <Pressable style={[styles.btn2Danger, busy && styles.disabled]} disabled={busy}
-          onPress={() => void run('team.disband', {}, '已解散')}>
-          <Text style={styles.btn2Text}>disband</Text>
-        </Pressable>
-      </View>
+      {error !== '' && (
+        <View style={[styles.msgBox, { backgroundColor: colors.badSoft, borderColor: colors.bad + '55' }]}>
+          <Text style={[styles.msgText, { color: colors.bad }]}>{error}</Text>
+        </View>
+      )}
+      {okMsg !== '' && (
+        <View style={[styles.msgBox, { backgroundColor: colors.okSoft, borderColor: colors.ok + '55' }]}>
+          <Text style={[styles.msgText, { color: colors.ok }]}>{okMsg}</Text>
+        </View>
+      )}
 
-      <View style={styles.row}>
-        <Text style={styles.joinLabel}>加入方式：</Text>
-        <Pressable style={[styles.btn2, busy && styles.disabled]} disabled={busy}
-          onPress={() => void run('team.setJoinMode', { mode: 'open' }, '已切换公开')}>
-          <Text style={styles.btn2Text}>open</Text>
-        </Pressable>
-        <Pressable style={[styles.btn2, busy && styles.disabled]} disabled={busy}
-          onPress={() => void run('team.setJoinMode', { mode: 'invite' }, '已切换邀请制')}>
-          <Text style={styles.btn2Text}>invite</Text>
-        </Pressable>
-      </View>
+      <SectionLabel text="创建队伍" right={<Chip label="team.create" tone="accent2" />} />
+      <Card>
+        <StyledInput value={name} onChangeText={setName} placeholder="新队伍名" editable={!busy} />
+        <View style={{ marginTop: spacing.s }}>
+          <PrimaryButton label="创建" icon="add-circle-outline" loading={busy}
+            disabled={busy || name.trim() === ''}
+            onPress={() => void run('team.create', { name: name.trim() }, '已创建')} />
+        </View>
+      </Card>
 
-      {error !== '' && <Text style={styles.error}>{error}</Text>}
-      {okMsg !== '' && <Text style={styles.ok}>{okMsg}</Text>}
-    </View>
+      <SectionLabel text="队伍状态" right={<Chip label="team.info" tone="accent2" />} />
+      <Card>
+        <Text style={styles.hint}>详情展示在队伍列表与成员页。</Text>
+        <View style={styles.actRow}>
+          <GhostButton label="查询详情" icon="information-circle-outline" tone="neutral" disabled={busy}
+            onPress={() => void run('team.info', {}, '详情已显示于列表')} />
+        </View>
+      </Card>
+
+      <SectionLabel text="加入方式" right={<Chip label="team.setJoinMode" tone="accent2" />} />
+      <Card>
+        <View style={styles.actRow}>
+          <GhostButton label="公开" icon="globe-outline" tone="accent" disabled={busy}
+            onPress={() => void run('team.setJoinMode', { mode: 'open' }, '已切换公开')} />
+          <GhostButton label="邀请制" icon="mail-outline" tone="neutral" disabled={busy}
+            onPress={() => void run('team.setJoinMode', { mode: 'invite' }, '已切换邀请制')} />
+        </View>
+      </Card>
+
+      <SectionLabel text="退出与解散" right={<Chip label="不可撤销" tone="bad" />} />
+      <Card>
+        <Text style={styles.hint}>解散会删除中央队伍并向各节点下发清除；队长不可直接退出。</Text>
+        <View style={styles.actRow}>
+          <GhostButton label="退出队伍" icon="exit-outline" tone="neutral" disabled={busy}
+            onPress={() => void run('team.leave', {}, '已退出')} />
+          <GhostButton label="解散队伍" icon="trash-outline" tone="bad" disabled={busy}
+            onPress={() => void run('team.disband', {}, '已解散')} />
+        </View>
+      </Card>
+    </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  card: { width: '100%', maxWidth: 420, alignSelf: 'center', marginTop: 14 },
-  title: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  row: { flexDirection: 'row', gap: 8, marginTop: 10, alignItems: 'center' },
-  input: {
-    flex: 1,
-    backgroundColor: colors.card,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    color: colors.text,
-    fontSize: 14,
-  },
-  btn: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  btn2: {
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: colors.primary,
-  },
-  btn2Danger: {
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: colors.danger,
-  },
-  btn2Text: { color: colors.primaryText, fontSize: 13 },
-  joinLabel: { color: colors.muted, fontSize: 12 },
-  btnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' },
-  disabled: { opacity: 0.5 },
-  error: { color: colors.danger, fontSize: 12, marginTop: 8 },
-  ok: { color: colors.ok, fontSize: 12, marginTop: 8 },
-});
+const styles = themedStyles(() => ({
+  wrap: { flex: 1, paddingHorizontal: spacing.l, paddingTop: spacing.m },
+  headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { color: colors.text, fontSize: 20, fontWeight: '700' },
+  sub: { color: colors.textFaint, fontSize: 12, marginTop: 2 },
+  msgBox: { marginTop: spacing.m, padding: spacing.m, borderRadius: radius.s, borderWidth: 1 },
+  msgText: { fontSize: 12, lineHeight: 17 },
+  hint: { color: colors.textFaint, fontSize: 12, lineHeight: 18 },
+  actRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s, marginTop: spacing.s },
+}));

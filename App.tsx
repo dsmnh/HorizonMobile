@@ -1,12 +1,13 @@
 /**
- * App 根入口（Expo 51 / React 18）：NativeStack 六路由。
+ * App 根入口（Expo 51 / React 18）：NativeStack 九路由。
  * 协议面：预鉴权 account.login/register（src/net/preauth.ts）→ HorizonConn 会话 → 各功能屏。
- * 旧底座入口（SQLiteProvider/导航/主题）归档于 src-app-legacy/AppEntry.legacy.tsx。
+ * 外观：主题取自 src/ui/theme（对齐 AEMobileApp 调色板），深浅色选择持久化在 AsyncStorage。
  */
 import './src/net/buffer-global';
 import React, { useCallback, useEffect, useState } from 'react';
 import { StatusBar } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DarkTheme, DefaultTheme, NavigationContainer, type Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { HorizonConn, type Transport } from './src/net/conn';
 import { RnTransport } from './src/net/transport-rn';
@@ -15,6 +16,9 @@ import { normalizeUuids } from './src/net/identity';
 import { saveLastConn } from './src/ui/lastConn';
 import { AppContext, type RootStackParamList } from './src/ui/nav';
 import { LoginRoute, HomeRoute, TeamRoute, ChatRoute, MonitorRoute, SessionRoute, MeRoute, BqRoute, SettingsRoute } from './src/ui/routes';
+import { setThemeMode, useTheme, type ThemeMode } from './src/ui/theme';
+
+const THEME_KEY = 'horizon.theme.mode';
 
 /** 终止性错误（不重连）的用户可操作文案；非已知码返回 null，由调用方保留原始文案。 */
 function fatalText(code: string): string | null {
@@ -33,11 +37,22 @@ function fatalText(code: string): string | null {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App(): JSX.Element {
+  const { colors, mode } = useTheme();
   const [conn, setConn] = useState<HorizonConn | null>(null);
   const [connected, setConnected] = useState(false);
   const [uuids, setUuids] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  // 主题：启动时读回上次选择，之后每次变更写回（失败忽略，退回深色即可）
+  useEffect(() => {
+    void AsyncStorage.getItem(THEME_KEY).then((v) => {
+      if (v === 'light' || v === 'dark') setThemeMode(v as ThemeMode);
+    });
+  }, []);
+  useEffect(() => {
+    void AsyncStorage.setItem(THEME_KEY, mode);
+  }, [mode]);
 
   // conn 的常驻重连循环自动恢复；这里只把 isConnected 的可见状态以低频同步到 UI
   useEffect(() => {
@@ -110,23 +125,43 @@ export default function App(): JSX.Element {
     setUuids([]);
   }, [conn]);
 
+  // 导航主题与页面底色跟随调色板；主题切换时以 key 重挂，避免残留旧色板缓存
+  const navTheme: Theme = {
+    ...(mode === 'dark' ? DarkTheme : DefaultTheme),
+    colors: {
+      ...(mode === 'dark' ? DarkTheme : DefaultTheme).colors,
+      primary: colors.accent,
+      background: colors.bg,
+      card: colors.surface,
+      text: colors.text,
+      border: colors.border,
+      notification: colors.accent2,
+    },
+  };
+
   return (
     <AppContext.Provider value={{ conn, connected, uuids, setUuids, authenticate, resetPassword, disconnect, busy, error }}>
-      <StatusBar barStyle="light-content" backgroundColor="#0D1526" />
-      <NavigationContainer>
+      <StatusBar barStyle={mode === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
+      <NavigationContainer theme={navTheme} key={mode}>
         <Stack.Navigator
           initialRouteName={conn ? 'Home' : 'Login'}
-          screenOptions={{ headerStyle: { backgroundColor: '#0D1526' }, headerTintColor: '#E8EEF9' }}
+          screenOptions={{
+            headerStyle: { backgroundColor: colors.bg },
+            headerTintColor: colors.text,
+            headerTitleStyle: { fontSize: 16, fontWeight: '600' },
+            headerShadowVisible: false,
+            contentStyle: { backgroundColor: colors.bg },
+          }}
         >
-          <Stack.Screen name="Login" component={LoginRoute} />
-          <Stack.Screen name="Home" component={HomeRoute} />
-          <Stack.Screen name="Team" component={TeamRoute} />
-          <Stack.Screen name="Chat" component={ChatRoute} />
-          <Stack.Screen name="Monitor" component={MonitorRoute} />
-          <Stack.Screen name="Session" component={SessionRoute} />
-          <Stack.Screen name="Me" component={MeRoute} />
-          <Stack.Screen name="Bq" component={BqRoute} />
-          <Stack.Screen name="Settings" component={SettingsRoute} />
+          <Stack.Screen name="Login" component={LoginRoute} options={{ headerShown: false }} />
+          <Stack.Screen name="Home" component={HomeRoute} options={{ headerShown: false }} />
+          <Stack.Screen name="Team" component={TeamRoute} options={{ title: '队伍' }} />
+          <Stack.Screen name="Chat" component={ChatRoute} options={{ title: '聊天' }} />
+          <Stack.Screen name="Monitor" component={MonitorRoute} options={{ title: '监控' }} />
+          <Stack.Screen name="Session" component={SessionRoute} options={{ title: '会话' }} />
+          <Stack.Screen name="Me" component={MeRoute} options={{ title: 'ME 设备' }} />
+          <Stack.Screen name="Bq" component={BqRoute} options={{ title: 'BQ 同步' }} />
+          <Stack.Screen name="Settings" component={SettingsRoute} options={{ title: '设置' }} />
         </Stack.Navigator>
       </NavigationContainer>
     </AppContext.Provider>
