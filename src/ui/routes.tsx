@@ -116,9 +116,9 @@ export function HomeRoute({ navigation }: RootStackProps<'Home'>): JSX.Element {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[styles.idText, on && { color: colors.accent }]} numberOfLines={1}>{u}</Text>
-                      <Text style={styles.idHint}>{on ? '当前操作身份' : '点按切换'}</Text>
+                      <Text style={styles.idHint}>{on ? '主界面已选身份' : '点按切换主界面身份'}</Text>
                     </View>
-                    {on ? <Chip label="当前" tone="accent" /> : null}
+                    {on ? <Chip label="本页" tone="accent" /> : null}
                   </Pressable>
                 );
               })}
@@ -143,14 +143,17 @@ export function HomeRoute({ navigation }: RootStackProps<'Home'>): JSX.Element {
                 </Pressable>
               ))}
             </View>
-
-            <View style={{ marginTop: spacing.xl }}>
-              <GhostButton label="断开连接" icon="log-out-outline" tone="bad" onPress={disconnect} />
-            </View>
           </>
         )}
 
         {conn != null && uuids.length === 0 && <MonitorScreen conn={conn} />}
+
+        {/* 断开连接：只要还有会话就保留出口，未绑定身份时同样能退出 */}
+        {conn != null ? (
+          <View style={{ marginTop: spacing.xl }}>
+            <GhostButton label="断开连接" icon="log-out-outline" tone="bad" onPress={disconnect} />
+          </View>
+        ) : null}
 
         <AboutScreen />
         <Text style={styles.footer}>Horizon · 协议 1.6.4 · 会话经 HMAC 鉴权</Text>

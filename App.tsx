@@ -44,15 +44,26 @@ export default function App(): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
-  // 主题：启动时读回上次选择，之后每次变更写回（失败忽略，退回深色即可）
+  // 主题：先读回上次选择，读完才进入「变更即写回」，否则启动时默认值会覆盖已存选择
+  const [themeLoaded, setThemeLoaded] = useState(false);
   useEffect(() => {
-    void AsyncStorage.getItem(THEME_KEY).then((v) => {
-      if (v === 'light' || v === 'dark') setThemeMode(v as ThemeMode);
-    });
+    let alive = true;
+    AsyncStorage.getItem(THEME_KEY)
+      .then((v) => {
+        if (alive && (v === 'light' || v === 'dark')) setThemeMode(v as ThemeMode);
+      })
+      .catch(() => undefined)
+      .then(() => {
+        if (alive) setThemeLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
   useEffect(() => {
-    void AsyncStorage.setItem(THEME_KEY, mode);
-  }, [mode]);
+    if (!themeLoaded) return;
+    AsyncStorage.setItem(THEME_KEY, mode).catch(() => undefined);
+  }, [mode, themeLoaded]);
 
   // conn 的常驻重连循环自动恢复；这里只把 isConnected 的可见状态以低频同步到 UI
   useEffect(() => {
@@ -125,7 +136,7 @@ export default function App(): JSX.Element {
     setUuids([]);
   }, [conn]);
 
-  // 导航主题与页面底色跟随调色板；主题切换时以 key 重挂，避免残留旧色板缓存
+  // 导航主题与页面底色跟随调色板；theme 变化会就地重绘，不可用 key 重挂——重挂会把导航栈退回首屏
   const navTheme: Theme = {
     ...(mode === 'dark' ? DarkTheme : DefaultTheme),
     colors: {
@@ -142,7 +153,7 @@ export default function App(): JSX.Element {
   return (
     <AppContext.Provider value={{ conn, connected, uuids, setUuids, authenticate, resetPassword, disconnect, busy, error }}>
       <StatusBar barStyle={mode === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
-      <NavigationContainer theme={navTheme} key={mode}>
+      <NavigationContainer theme={navTheme}>
         <Stack.Navigator
           initialRouteName={conn ? 'Home' : 'Login'}
           screenOptions={{
