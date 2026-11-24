@@ -2,6 +2,9 @@
 import { strict as assert } from 'node:assert';
 import { encodeFrame, T, readFrame, MAX_FRAME_BYTES, FLAG_TLS_BOUND } from '../src/net/protocol';
 import { sign, kidOf } from '../src/net/auth';
+import { normalizeIdentities } from '../src/net/identity';
+import { summarizeNodes } from '../src/net/dashboard';
+import { fromEvent, fromHistory, isRelevant, mergeHistory } from '../src/net/chat-merge';
 import { decidePin, normalizeFingerprint, pinKey } from '../src/net/tls-pin';
 
 function reader(data: Buffer) {
@@ -140,6 +143,26 @@ function runAll() {
   testSignatureConsistency();
   testKidOf();
   testTofuDecision();
+  assert.deepEqual(normalizeIdentities(['old', { uuid: 'new', name: ' 玩家 ' }, { name: '无效' }]), [
+    { uuid: 'old' }, { uuid: 'new', name: '玩家' },
+  ]);
+  console.log('PASS  dashboard identity preserves reported player names');
+  const nodes = [{ frame: { players: 0, tps: 20 } }, { offline: true, frame: { players: 15, tps: 5 } }, {}];
+  assert.deepEqual(summarizeNodes(nodes), { online: 1, total: 3, players: 0, minTps: 20 });
+  assert.deepEqual(summarizeNodes([{}]), { online: 0, total: 1, players: null, minTps: null });
+  console.log('PASS  dashboard excludes offline and unavailable metrics');
+  assert.equal(isRelevant({ private: true, from: 'self', to: 'other' }, 'private', 'peer', 'self'), false);
+  assert.equal(isRelevant({ private: true, from: 'peer', to: 'self' }, 'private', 'peer', 'self'), true);
+  assert.equal(isRelevant({ private: true, from: 'self', to: 'peer' }, 'private', 'peer', 'self'), true);
+  assert.equal(isRelevant({ private: true, from: 'peer' }, 'private', 'peer', 'self'), true);
+  const live = fromEvent({ seq: 19, from: 'peer', text: '文本', srv: '节点一', team: '小队', ts: 100 }, 1);
+  const history = fromHistory({ id: 32, from: 'peer', text: '文本', srv: '节点一', ts: 100 });
+  const otherNode = fromHistory({ id: 33, from: 'peer', text: '文本', srv: '节点二', ts: 100 });
+  const combined = mergeHistory([history, otherNode], [live]);
+  assert.equal(combined.length, 2);
+  assert.equal(combined.find((message) => message.mid === 32)?.team, '小队');
+  assert.equal(combined.find((message) => message.mid === 33)?.team, undefined);
+  console.log('PASS  private chat peer isolation');
   console.log('== protocol unit tests: all passed ==');
 }
 

@@ -65,12 +65,18 @@ async function main(): Promise<void> {
     const stream = conn.subscribeTeam('uuid-a');
     await waitFor(() => stream.streamId >= 0, 2000);
     const sidBefore = stream.sid;
+    const closed = conn.subscribeStream('chat', { uuid: 'old-identity' });
+    await waitFor(() => closed.streamId >= 0, 2000);
+    closed.close();
+    const closedBeforeReply = conn.subscribeStream('chat', { uuid: 'closed-before-reply' });
+    closedBeforeReply.close();
+    await waitFor(() => backend.activeStreams.length === 1, 2000);
     // 断开现役连接（模拟服务端踢线）；流登记随连接关闭自动清理
     backend.kickAll();
     // 等待重连：退避 1s + 握手，5s 内应恢复
     await waitFor(() => conn.isConnected, 5000);
     await waitFor(() => stream.streamId >= 0 && stream.sid !== sidBefore, 3000);
-    step('断线后自动重连并重新订阅', conn.isConnected && stream.sid !== sidBefore && backend.activeStreams.length >= 1,
+    step('断线后自动重连并重新订阅', conn.isConnected && stream.sid !== sidBefore && backend.activeStreams.length === 1 && closed.streamId === -1,
       `subs=${backend.activeStreams.length} sidChanged=${stream.sid !== sidBefore}`);
     stream.close();
     conn.close();

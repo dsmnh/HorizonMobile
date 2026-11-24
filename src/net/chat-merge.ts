@@ -1,8 +1,3 @@
-/**
- * 聊天消息归一化：历史条目与流事件的键名不同（历史用 id，事件用 seq），
- * 公聊事件无 scope 字段、私聊事件以 private:true 标记，判定集中在此便于测试。
- */
-
 export interface ChatEventLike {
   k?: string;
   private?: boolean;
@@ -12,34 +7,73 @@ export interface ChatEventLike {
   ts?: number;
   seq?: number;
   mid?: number | string;
+  id?: number | string;
+  fromName?: string;
+  srv?: string;
+  team?: string;
+  world?: string;
 }
 
-/** 历史条目转 UI 结构；服务端历史用 id，缺失时退回序号。 */
-export function fromHistory(m: any): { mid: number | string; from: string; text: string; ts?: number } {
-  const mid = m?.id ?? m?.mid;
+export interface ChatMessage {
+  mid: number | string;
+  key: string;
+  from: string;
+  to?: string;
+  text: string;
+  ts?: number;
+  name?: string;
+  server?: string;
+  team?: string;
+  world?: string;
+}
+
+function normalize(event: ChatEventLike) {
   return {
-    mid: mid === undefined || mid === null ? `h-${m?.ts ?? 0}-${String(m?.from ?? '')}` : mid,
-    from: String(m?.from ?? ''),
-    text: String(m?.text ?? ''),
-    ts: typeof m?.ts === 'number' ? m.ts : undefined,
+    from: String(event.from ?? ''),
+    to: event.to,
+    text: String(event.text ?? ''),
+    ts: typeof event.ts === 'number' && Number.isFinite(event.ts) ? event.ts : undefined,
+    name: event.fromName || undefined,
+    server: event.srv || undefined,
+    team: event.team || undefined,
+    world: event.world || undefined,
   };
 }
 
-/** 流事件转 UI 结构；私聊缺 id 时用序号兜底，避免多条消息共用同一 key。 */
-export function fromEvent(e: ChatEventLike, seq: number): { mid: number | string; from: string; text: string; ts?: number } {
-  const mid = e.mid ?? e.seq ?? seq;
-  return {
-    mid,
-    from: String(e.from ?? ''),
-    text: String(e.text ?? ''),
-    ts: e.ts,
-  };
+export function fromHistory(message: ChatEventLike): ChatMessage {
+  const mid = message.id ?? message.mid ?? message.seq ?? `h-${message.ts ?? 0}-${message.from ?? ''}`;
+  return { ...normalize(message), mid, key: `history-${mid}` };
 }
 
-/** 事件是否属于当前频道：公聊看 private 位，私聊看收发双方。 */
+export function fromEvent(event: ChatEventLike, fallback: number): ChatMessage {
+  const mid = event.mid ?? event.seq ?? fallback;
+  return { ...normalize(event), mid, key: `event-${mid}-${event.ts ?? ''}` };
+}
+
+/** 历史 ID 与流序号属于不同序列，按载荷逐条配对并保留实时标签。 */
+export function mergeHistory(history: ChatMessage[], current: ChatMessage[]): ChatMessage[] {
+  const events = current.filter((message) => message.key.startsWith('event-'));
+  const byKey = new Map(current.map((message) => [message.key, message]));
+  const matched = new Set<string>();
+  for (const message of history) {
+    const same = events.find((event) => !matched.has(event.key) && event.ts === message.ts
+      && event.from === message.from && event.to === message.to && event.text === message.text
+      && event.server === message.server);
+    if (same) {
+      matched.add(same.key);
+      byKey.delete(same.key);
+    }
+    const prior = byKey.get(message.key);
+    byKey.set(message.key, { ...message, name: same?.name ?? prior?.name ?? message.name,
+      team: same?.team ?? prior?.team ?? message.team, world: same?.world ?? prior?.world ?? message.world });
+  }
+  return [...byKey.values()].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0)).slice(-250);
+}
+
 export function isRelevant(e: ChatEventLike, scope: 'public' | 'private', peer: string, uuid: string): boolean {
   if (scope === 'public') return e.private !== true;
   const p = peer.trim();
-  if (!p) return false;
-  return e.private === true && (e.from === p || e.to === p || e.from === uuid);
+  if (!p || e.private !== true) return false;
+  if (e.from === p) return e.to === undefined || e.to === uuid;
+  return e.from === uuid && e.to === p;
 }

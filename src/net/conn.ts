@@ -72,7 +72,10 @@ export class Stream {
   }
 
   close(): void {
-    if (this.connRef) this.connRef.unsub(this.streamId);
+    const conn = this.connRef;
+    this.connRef = undefined;
+    conn?.removeStream(this);
+    this.streamId = -1;
     this.handlers = [];
     this.fullHandlers = [];
   }
@@ -110,7 +113,7 @@ export class HorizonConn {
   private authed = false;
   private nonce = '';
   private clockOffset = 0;
-  private failCount = 0;
+  private connectionListeners = new Set<(connected: boolean) => void>();
   /** 握手期一次性读帧 waiter；ACTIVE 期为 null，帧全部走 onFrame 分发。 */
   private handshakeWaiter: ((f: Frame) => void) | null = null;
   /** 握手期错误出口：flags 一致性失败时主动终止等待，避免握手悬挂。 */
@@ -134,6 +137,17 @@ export class HorizonConn {
 
   get isConnected(): boolean {
     return this.authed;
+  }
+
+  onConnectionChange(listener: (connected: boolean) => void): () => void {
+    this.connectionListeners.add(listener);
+    return () => { this.connectionListeners.delete(listener); };
+  }
+
+  private setConnected(connected: boolean): void {
+    if (this.authed === connected) return;
+    this.authed = connected;
+    for (const listener of this.connectionListeners) listener(connected);
   }
 
   /** TLS 连接上所有出帧置 0x02；明文连接恒为 0（契约 §9.1）。 */
@@ -160,8 +174,8 @@ export class HorizonConn {
     while (this.running) {
       try {
         await this.handshakeAndAuth();
-        this.authed = true;
-        this.failCount = 0;
+        if (!this.running) throw new Error('连接已关闭');
+        this.setConnected(true);
         await this.resubscribeAll();
         return;
       } catch (e: any) {
@@ -191,6 +205,7 @@ export class HorizonConn {
   subscribeStream(op: string, p: any = {}): Stream {
     const stream = new Stream(op);
     stream.connRef = this;
+    stream.lastParams = p;
     this.streams.push(stream);
     if (this.authed) {
       this.rawSub(stream, p).catch(() => {
@@ -206,39 +221,57 @@ export class HorizonConn {
   }
 
   private async rawSub(stream: Stream, p: any, sid?: string): Promise<void> {
-    if (!this.authed) return; // 断连中的补订请求直接放弃，重连循环会接管
-    stream.lastParams = p;
+    if (!this.authed || stream.connRef !== this) return;
     const id = ++this.nextId;
-    const frame: any = { id, op: stream.op, p };
-    if (sid) frame.sid = sid;
-    this.transport.write(jsonFrame(T.SUB, frame, this.frameFlags));
-    // SUB_OK 由帧分发器按 id 完成；断连时 pending 被 reject，这里吞掉避免未捕获崩溃。
-    const promise = new Promise<Res>((resolve) => {
-      const timer = setTimeout(() => this.pending.delete(id), this.opts.requestTimeoutMs);
+    const frame = { id, op: stream.op, p, sid };
+    await new Promise<void>((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        resolve();
+      };
+      const timer = setTimeout(finish, this.opts.requestTimeoutMs);
       this.pending.set(id, {
         resolve: (res) => {
-          clearTimeout(timer);
-          stream.streamId = res.b?.s ?? -1;
+          const streamId = res.b?.s ?? -1;
+          finish();
+          if (stream.connRef !== this) {
+            this.unsub(streamId);
+            return;
+          }
+          stream.streamId = streamId;
           stream.sid = res.b?.sid ?? '';
-          resolve(res);
         },
-        reject: () => clearTimeout(timer),
+        reject: finish,
         timer,
       });
+      try {
+        this.transport.write(jsonFrame(T.SUB, frame, this.frameFlags));
+      } catch {
+        finish();
+      }
     });
-    await promise.catch(() => undefined);
   }
 
   /** @internal */
-  unsub(streamId: number): void {
+  removeStream(stream: Stream): void {
+    this.streams = this.streams.filter((active) => active !== stream);
+    this.unsub(stream.streamId);
+  }
+
+  private unsub(streamId: number): void {
     if (streamId < 0 || !this.authed) return;
     const frame: any = { s: streamId };
-    this.transport.write(jsonFrame(T.UNSUB, frame, this.frameFlags));
+    try {
+      this.transport.write(jsonFrame(T.UNSUB, frame, this.frameFlags));
+    } catch {
+      // 传输已关闭时，服务端会清理此连接的流。
+    }
   }
 
   close(): void {
     this.running = false;
-    this.authed = false;
+    this.setConnected(false);
     this.stopPing();
     this.transport.close();
     for (const [, p] of this.pending) {
@@ -326,7 +359,7 @@ export class HorizonConn {
   }
 
   private async resubscribeAll(): Promise<void> {
-    for (const stream of this.streams) {
+    for (const stream of [...this.streams]) {
       if (!this.authed) return; // 重订途中断线：交给重连循环
       try {
         await this.rawSub(stream, stream.lastParams ?? {}, stream.sid || undefined);
@@ -339,7 +372,10 @@ export class HorizonConn {
   /** 断连统一入口（传输 close 触发）；pending 清算 + 单飞重连。 */
   private onDisconnected(): void {
     const wasAuthed = this.authed;
-    this.authed = false;
+    this.setConnected(false);
+    this.buffer = Buffer.alloc(0);
+    for (const stream of this.streams) stream.streamId = -1;
+    this.handshakeFail?.(new Error('连接断开'));
     this.stopPing();
     for (const [, p] of this.pending) {
       clearTimeout(p.timer);
@@ -357,8 +393,9 @@ export class HorizonConn {
     while (this.running && !this.authed) {
       try {
         await this.handshakeAndAuth();
-        this.authed = true;
+        if (!this.running) return;
         this.reconnecting = false;
+        this.setConnected(true);
         await this.resubscribeAll();
         return;
       } catch (e: any) {
