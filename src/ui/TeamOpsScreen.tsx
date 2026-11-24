@@ -9,6 +9,7 @@ import { Alert, ScrollView, Text, View } from 'react-native';
 import { colors, radius, spacing, themedStyles } from './theme';
 import { Card, Chip, GhostButton, PrimaryButton, SectionLabel, StyledInput } from './components';
 import { HorizonConn, type Res } from '../net/conn';
+import { officialErrorText } from '../net/official';
 
 export interface TeamOpsScreenProps {
   conn: HorizonConn;
@@ -40,7 +41,9 @@ export function TeamOpsScreen({ conn, uuid, onChanged }: TeamOpsScreenProps): JS
         setOkMsg(doneText);
         if (mounted.current) onChanged?.();
       } else {
-        setError(`${op}: ${res.m ?? '失败'}`);
+        // 1.6.5：官方队伍模式下中央写入被拒（OFFICIAL_TEAM_MODE）与映射冲突换成可操作文案
+        const friendly = officialErrorText(res.m ?? '');
+        setError(`${op}: ${friendly ?? res.m ?? '失败'}`);
       }
     } catch (e: any) {
       setError(e.message ?? String(e));

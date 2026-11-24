@@ -11,6 +11,8 @@ export interface ChatEventLike {
   fromName?: string;
   srv?: string;
   team?: string;
+  /** 1.6.5 尾部追加：队伍标签来源，official = GTNHLib 官方队伍，su = ServerUtilities。 */
+  teamSource?: string;
   world?: string;
 }
 
@@ -24,10 +26,12 @@ export interface ChatMessage {
   name?: string;
   server?: string;
   team?: string;
+  teamSource?: string;
   world?: string;
 }
 
 function normalize(event: ChatEventLike) {
+  const teamSource = event.teamSource === 'official' || event.teamSource === 'su' ? event.teamSource : undefined;
   return {
     from: String(event.from ?? ''),
     to: event.to,
@@ -36,6 +40,7 @@ function normalize(event: ChatEventLike) {
     name: event.fromName || undefined,
     server: event.srv || undefined,
     team: event.team || undefined,
+    teamSource,
     world: event.world || undefined,
   };
 }
@@ -65,7 +70,9 @@ export function mergeHistory(history: ChatMessage[], current: ChatMessage[]): Ch
     }
     const prior = byKey.get(message.key);
     byKey.set(message.key, { ...message, name: same?.name ?? prior?.name ?? message.name,
-      team: same?.team ?? prior?.team ?? message.team, world: same?.world ?? prior?.world ?? message.world });
+      team: same?.team ?? prior?.team ?? message.team,
+      teamSource: same?.teamSource ?? prior?.teamSource ?? message.teamSource,
+      world: same?.world ?? prior?.world ?? message.world });
   }
   return [...byKey.values()].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0)).slice(-250);
 }

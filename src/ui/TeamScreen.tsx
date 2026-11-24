@@ -20,9 +20,11 @@ interface TeamRow {
 export interface TeamScreenProps {
   conn: HorizonConn;
   uuid: string;
+  /** 转发队伍流事件，供页面内其它分区（如官方队伍投影）按事件类型增量刷新。 */
+  onEvent?: (event: TeamEvent) => void;
 }
 
-export function TeamScreen({ conn, uuid }: TeamScreenProps): JSX.Element {
+export function TeamScreen({ conn, uuid, onEvent }: TeamScreenProps): JSX.Element {
   const [membershipLoaded, setMembershipLoaded] = useState(false);
   const [membership, setMembership] = useState<{ name?: string; teamId?: number; members?: { uuid: string; role: string }[] } | null>(null);
   const [teams, setTeams] = useState<TeamRow[]>([]);
@@ -59,7 +61,11 @@ export function TeamScreen({ conn, uuid }: TeamScreenProps): JSX.Element {
   useEffect(() => {
     const stream = conn.subscribeTeam(uuid);
     streamRef.current = stream;
-    stream.addEventListener((e) => setLastEvent(e));
+    stream.addEventListener((e) => {
+      setLastEvent(e);
+      // 1.6.5：官方队伍投影或映射变化时，由上层按事件类型重取 team.official
+      if (e.k === 'officialUpdated' || e.k === 'officialMapChanged') onEvent?.(e);
+    });
     void refresh();
     return () => {
       stream.close();

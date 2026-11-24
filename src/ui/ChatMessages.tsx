@@ -24,8 +24,13 @@ export function ChatMessageRow({ message, grouped, mine, mode, expanded, onToggl
 }): JSX.Element {
   const { colors } = useTheme();
   const name = message.name || message.from || '系统通知';
-  const labels = [message.team, mode === 'labels' || expanded ? message.server : undefined,
-    mode === 'labels' || expanded ? message.world : undefined].filter(Boolean);
+  // 1.6.5：队伍标签带来源（official 官方队伍 / su ServerUtilities），用不同色区分两套系统
+  const tags: { text: string; official: boolean }[] = [];
+  if (message.team) tags.push({ text: message.team, official: message.teamSource === 'official' });
+  if (mode === 'labels' || expanded) {
+    if (message.server) tags.push({ text: message.server, official: false });
+    if (message.world) tags.push({ text: message.world, official: false });
+  }
   const canExpand = mode === 'classic' && Boolean(message.server || message.world);
   const hue = Array.from(message.from + (message.server ?? '')).reduce((value, character) => (value * 31 + character.charCodeAt(0)) % 360, 0);
   const time = toDate(message.ts)?.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -44,7 +49,9 @@ export function ChatMessageRow({ message, grouped, mine, mode, expanded, onToggl
       <View style={[styles.message, mine && styles.messageMine]}>
         {!grouped && <View style={[styles.meta, mine && styles.metaMine]}>
           <Text style={[styles.name, { color: colors.textDim }]}>{name}</Text>
-          {labels.map((label, index) => <Text key={index} style={[styles.label, { color: colors.accent, backgroundColor: colors.accentSoft }]}>{label}</Text>)}
+          {tags.map((tag, index) => <Text key={index} style={[styles.label,
+            { color: tag.official ? colors.accent2 : colors.accent,
+              backgroundColor: tag.official ? colors.accent2Soft : colors.accentSoft }]}>{tag.text}</Text>)}
         </View>}
         <View style={[styles.bubble, { backgroundColor: mine ? colors.accentSoft : colors.surface }]}>
           <Text selectable style={{ color: colors.text, fontSize: 14, lineHeight: 20 }}>{message.text}</Text>

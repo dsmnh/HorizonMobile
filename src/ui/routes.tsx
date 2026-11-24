@@ -12,6 +12,7 @@ import { LoginScreen } from './LoginScreen';
 import { TeamScreen } from './TeamScreen';
 import { TeamOpsScreen } from './TeamOpsScreen';
 import { TeamRosterScreen } from './TeamRosterScreen';
+import { OfficialTeamScreen } from './OfficialTeamScreen';
 import { ChatScreen } from './ChatScreen';
 import { MonitorScreen } from './MonitorScreen';
 import { MeScreen } from './MeScreen';
@@ -131,11 +132,14 @@ const bindingHint = '先在首页绑定游戏身份';
 export function TeamRoute(): JSX.Element {
   const { conn, activeUuid } = useApp();
   const [revision, refresh] = React.useReducer((value: number) => value + 1, 0);
+  // 1.6.5：官方队伍投影/映射事件只重挂投影分区，避免整页重订阅队伍流
+  const [officialRevision, bumpOfficial] = React.useReducer((value: number) => value + 1, 0);
   return (
     <ScrollView key={activeUuid} contentContainerStyle={styles.body}>
       {conn && activeUuid ? <>
         <SettingsGroup title="当前身份"><SettingsRow icon="person-outline" label={activeUuid} divider={false} /></SettingsGroup>
-        <TeamScreen key={revision} conn={conn} uuid={activeUuid} />
+        <TeamScreen key={revision} conn={conn} uuid={activeUuid} onEvent={bumpOfficial} />
+        <OfficialTeamScreen key={'official-' + officialRevision} conn={conn} uuid={activeUuid} />
         <TeamRosterScreen key={'roster-' + revision} conn={conn} uuid={activeUuid} />
         <TeamOpsScreen conn={conn} uuid={activeUuid} onChanged={refresh} />
       </> : <EmptyState icon="people-outline" title="未绑定身份" subtitle={bindingHint} />}

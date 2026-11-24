@@ -5,6 +5,10 @@ import { sign, kidOf } from '../src/net/auth';
 import { normalizeIdentities } from '../src/net/identity';
 import { summarizeNodes } from '../src/net/dashboard';
 import { fromEvent, fromHistory, isRelevant, mergeHistory } from '../src/net/chat-merge';
+import {
+  normalizeCandidates, normalizeLinks, normalizeTeams, officialErrorText, officialKey,
+  officialState, reasonLabel, rolesOf, slotKey, stateLabel, teamsOfPlayer, worldCount,
+} from '../src/net/official';
 import { decidePin, normalizeFingerprint, pinKey } from '../src/net/tls-pin';
 
 function reader(data: Buffer) {
@@ -133,6 +137,65 @@ function testTofuDecision() {
   console.log('PASS  TOFU 指纹判定与键格式');
 }
 
+/** 契约 1.6.5 §8.8：官方队伍投影归一化、状态判定与只读语义的用户文案。 */
+function testOfficialProjection() {
+  const links = normalizeLinks([
+    { nodeId: 5, worldRef: 'w:world:1a2b', officialTeamId: 't-1', gen: 3, updatedAt: 100, stale: false },
+    { nodeId: -1, worldRef: 'w:world:1a2b', officialTeamId: 't-x' },
+    { nodeId: 6, worldRef: '', officialTeamId: 't-y' },
+    { nodeId: 7, worldRef: 'w:world:1a2b' },
+    null,
+  ]);
+  assert.equal(links.length, 1, '缺 nodeId/worldRef/officialTeamId 的绑定应整体丢弃');
+  assert.equal(links[0].officialTeamId, 't-1');
+  assert.equal(slotKey(5, 'w:world:1a2b'), '5/w:world:1a2b');
+  assert.equal(officialKey(5, 'w:world:1a2b', 't-1'), '5/w:world:1a2b/t-1');
+
+  const teams = normalizeTeams([
+    { nodeId: 5, worldRef: 'w:world:1a2b', officialTeamId: 't-1', gen: 3, seq: 9, ready: true,
+      stale: false, name: '挖矿队', owners: ['a', ''], officers: ['b'], members: ['a', 'b', 'c'] },
+    { nodeId: 5, worldRef: 'w:world:1a2b', officialTeamId: 't-2', gen: 3, seq: 9, ready: false,
+      stale: true, name: '', owners: [], officers: [], members: [] },
+    'bad',
+  ]);
+  assert.equal(teams.length, 2, '非对象元素应丢弃');
+  assert.deepEqual(teams[0].owners, ['a'], '空串 UUID 不应进入名单');
+  assert.deepEqual(rolesOf(teams[0], 'a'), ['owner', 'member'], '同一 UUID 可同时是 owner 与 member');
+  assert.deepEqual(rolesOf(teams[0], 'c'), ['member']);
+  assert.deepEqual(rolesOf(teams[0], 'z'), [], '非成员没有角色');
+  assert.equal(officialState(teams[0]), 'ok');
+  assert.equal(stateLabel(officialState(teams[0])), '已同步');
+  assert.equal(officialState(teams[1]), 'missing', '名字为空说明映射指向的官方队伍已消失');
+  assert.equal(stateLabel(officialState({ ...teams[0], ready: false })), '投影已过期');
+  assert.equal(officialState({ ...teams[0], stale: true }), 'stale');
+  assert.equal(worldCount(teams), 1, '两支队伍在同一世界只算一个世界');
+  assert.equal(teamsOfPlayer(teams, 'b').length, 1);
+  assert.equal(teamsOfPlayer(teams, '').length, 0, '未绑定身份不返回任何官方队伍');
+
+  const candidates = normalizeCandidates([
+    { nodeId: 5, worldRef: 'w:world:1a2b', officialTeamId: 't-1', name: '挖矿队', reason: 'uuid-overlap' },
+    { nodeId: 5, worldRef: 'w:world:1a2b', officialTeamId: 't-3', name: '同名队', reason: 'name-similar' },
+    { nodeId: 5, name: '缺字段' },
+  ]);
+  assert.equal(candidates.length, 2);
+  assert.equal(reasonLabel(candidates[0].reason), '成员重合');
+  assert.equal(reasonLabel(candidates[1].reason), '同名');
+  assert.equal(reasonLabel(''), '候选', '空理由有兜底文案');
+  assert.equal(reasonLabel('自定义'), '自定义', '未知理由原样展示便于排错');
+
+  assert.ok((officialErrorText('OFFICIAL_TEAM_MODE') ?? '').includes('只读投影'));
+  assert.ok((officialErrorText('MAP_CONFLICT') ?? '').includes('映射'));
+  assert.equal(officialErrorText('FORBIDDEN'), null, '非官方队伍错误码不由本层改写');
+
+  // 1.6.5 聊天：队伍来源随实时事件进入消息，历史合并时优先保留实时标签
+  const live = fromEvent({ seq: 21, from: 'peer', text: '文本', srv: '节点一', team: '官方队', teamSource: 'official', ts: 100 }, 1);
+  assert.equal(live.teamSource, 'official');
+  assert.equal(fromEvent({ seq: 22, from: 'peer', text: 'x', teamSource: 'unknown' }, 2).teamSource, undefined, '未知来源丢弃');
+  const merged = mergeHistory([fromHistory({ id: 40, from: 'peer', text: '文本', srv: '节点一', ts: 100 })], [live]);
+  assert.equal(merged.find((message) => message.mid === 40)?.teamSource, 'official', '实时来源标签合并进历史消息');
+  console.log('PASS  official team projection (contract 1.6.5)');
+}
+
 function runAll() {
   testFrameRoundtrip();
   testFrameEmptyPayload();
@@ -163,6 +226,7 @@ function runAll() {
   assert.equal(combined.find((message) => message.mid === 32)?.team, '小队');
   assert.equal(combined.find((message) => message.mid === 33)?.team, undefined);
   console.log('PASS  private chat peer isolation');
+  testOfficialProjection();
   console.log('== protocol unit tests: all passed ==');
 }
 
