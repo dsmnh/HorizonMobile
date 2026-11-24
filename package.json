@@ -4,6 +4,7 @@
   "private": true,
   "description": "HorizonMobile：深空矩阵新视野的 Android App（AEMobileApp 底座迁移）",
   "scripts": {
+    "postinstall": "node patch-rn-screens.cjs",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "test": "tsc -p tsconfig.test.json && node dist-test/test/protocol-unit.js && node dist-test/test/e2e.js",
@@ -14,6 +15,7 @@
     "@expo/vector-icons": "^14.0.3",
     "@noble/hashes": "^1.4.0",
     "@react-native-async-storage/async-storage": "^1.23.1",
+    "@react-navigation/bottom-tabs": "^6.6.1",
     "@react-navigation/native": "^6.1.18",
     "@react-navigation/native-stack": "^6.11.0",
     "@types/react": "^18.3.31",
