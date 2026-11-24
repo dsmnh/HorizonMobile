@@ -6,8 +6,9 @@ import { normalizeIdentities } from '../src/net/identity';
 import { summarizeNodes } from '../src/net/dashboard';
 import { fromEvent, fromHistory, isRelevant, mergeHistory } from '../src/net/chat-merge';
 import {
-  normalizeCandidates, normalizeLinks, normalizeTeams, officialErrorText, officialKey,
-  officialState, reasonLabel, rolesOf, slotKey, stateLabel, teamsOfPlayer, worldCount,
+  canInvite, currentOfficialTeam, needConfirmText, normalizeCandidates, normalizeLinks,
+  normalizeTeams, officialErrorText, officialKey, officialState, parseNeedConfirm, reasonLabel,
+  rolesOf, slotKey, stateLabel, teamsOfPlayer, worldCount,
 } from '../src/net/official';
 import { decidePin, normalizeFingerprint, pinKey } from '../src/net/tls-pin';
 
@@ -194,6 +195,22 @@ function testOfficialProjection() {
   const merged = mergeHistory([fromHistory({ id: 40, from: 'peer', text: '文本', srv: '节点一', ts: 100 })], [live]);
   assert.equal(merged.find((message) => message.mid === 40)?.teamSource, 'official', '实时来源标签合并进历史消息');
   console.log('PASS  official team projection (contract 1.6.5)');
+
+  // 1.6.6 受控写入：只开放邀请与接受，合队必须先确认
+  assert.equal(officialErrorText('PROJECTION_STALE')?.includes('投影已过期'), true);
+  assert.equal(canInvite(teams[0], 'a'), true, '队长可邀请');
+  assert.equal(canInvite(teams[0], 'b'), true, '副队长可邀请');
+  assert.equal(canInvite(teams[0], 'c'), false, '普通成员不可邀请');
+  assert.equal(currentOfficialTeam(teams, 'c')?.officialTeamId, 't-1');
+  assert.equal(currentOfficialTeam(teams, 'z'), null, '不在任何官方队伍时无原队');
+  const confirmInfo = parseNeedConfirm({ consumed: 't-2', surviving: 't-1', memberCount: 1 });
+  assert.ok(confirmInfo);
+  assert.equal(confirmInfo?.consumed, 't-2');
+  assert.equal(parseNeedConfirm({ consumed: 't-2' }), null, '字段不全不展示半截提示');
+  assert.equal(parseNeedConfirm(null), null);
+  assert.ok(needConfirmText(confirmInfo!).includes('t-2'), '确认文案点名被并入的队伍');
+  assert.ok(needConfirmText(confirmInfo!).includes('不可撤销'));
+  console.log('PASS  official team controlled writes (contract 1.6.6)');
 }
 
 function runAll() {

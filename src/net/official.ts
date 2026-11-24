@@ -185,5 +185,45 @@ export function officialErrorText(code: string): string | null {
   if (code === 'MAP_CONFLICT') {
     return '官方队伍映射缺失或冲突：请在本页确认绑定，或联系服主核对世界与队伍对应关系';
   }
+  if (code === 'PROJECTION_STALE') {
+    return '官方队伍投影已过期或该世界未加载：请等节点重新上报快照后再试，本次未下发任何指令';
+  }
   return null;
+}
+
+/** 受控写入（契约 1.6.6 §8.9）需要人工确认的合队信息。 */
+export interface NeedConfirm {
+  consumed: string;
+  surviving: string;
+  memberCount: number;
+}
+
+/** NEEDS_CONFIRM 回包里的合队信息；字段不全时返回 null（不展示半截提示）。 */
+export function parseNeedConfirm(body: unknown): NeedConfirm | null {
+  if (body == null || typeof body !== 'object') return null;
+  const raw = body as Record<string, unknown>;
+  const consumed = typeof raw.consumed === 'string' ? raw.consumed : '';
+  const surviving = typeof raw.surviving === 'string' ? raw.surviving : '';
+  if (consumed === '' || surviving === '') return null;
+  const count = typeof raw.memberCount === 'number' && Number.isFinite(raw.memberCount)
+    ? raw.memberCount : 0;
+  return { consumed, surviving, memberCount: count };
+}
+
+/** 合队确认文案：说明被并入的队伍与任务归属，避免玩家以为只是换队。 */
+export function needConfirmText(info: NeedConfirm): string {
+  return `接受后你当前的官方队伍（${info.consumed}，仅 ${info.memberCount} 人）会被并入 ${info.surviving}，`
+    + '该队伍的任务与数据一并迁移且原队伍 UUID 失效。确认后不可撤销。';
+}
+
+/** 能否从 App 发起邀请：投影里须为 owners 或 officers（后端同样预检）。 */
+export function canInvite(team: OfficialTeam, uuid: string): boolean {
+  const roles = rolesOf(team, uuid);
+  return roles.includes('owner') || roles.includes('officer');
+}
+
+/** 玩家当前所在的官方队伍（用于接受邀请时的原队判定）。 */
+export function currentOfficialTeam(teams: OfficialTeam[], uuid: string): OfficialTeam | null {
+  const found = teamsOfPlayer(teams, uuid);
+  return found.length > 0 ? found[0] : null;
 }

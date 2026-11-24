@@ -1,17 +1,20 @@
 /**
- * 官方队伍投影屏（契约 1.6.5 §8.8）：GTNHLib 官方队伍的跨服只读视图与人工映射。
+ * 官方队伍投影屏（契约 1.6.5 §8.8、1.6.6 §8.9）：GTNHLib 官方队伍的跨服视图与人工映射。
  * 协议面：team.info 取中央 teamId → team.official 拉投影 → team.map 取候选；
  * team.map.set / team.map.clear 仅服主/超管可用（后端裁决，FORBIDDEN 原样展示）。
- * 只读语义：官方模式节点不接受中央队伍写入，本屏不提供任何成员增删入口。
+ * 写入只开放邀请与接受两条官方动作：名单仍由 GTNHLib 维护，踢人、改角色、解散等只在游戏内进行；
+ * 可能触发官方合队的接受操作必须先经 NEEDS_CONFIRM 让玩家确认任务归属变化。
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { colors, radius, spacing, themedStyles } from './theme';
-import { Card, Chip, EmptyState, GhostButton, SectionLabel, StatusDot } from './components';
+import { Card, Chip, EmptyState, GhostButton, SectionLabel, StatusDot, StyledInput } from './components';
 import { HorizonConn, type Res } from '../net/conn';
 import {
-  normalizeCandidates, normalizeLinks, normalizeTeams, officialState, reasonLabel, rolesOf,
-  slotKey, stateLabel, worldCount, type MapCandidate, type OfficialLink, type OfficialTeam,
+  canInvite, needConfirmText, normalizeCandidates, normalizeLinks,
+  normalizeTeams, officialErrorText, officialState, parseNeedConfirm, reasonLabel, rolesOf,
+  slotKey, stateLabel, worldCount, type MapCandidate, type NeedConfirm, type OfficialLink,
+  type OfficialTeam,
 } from '../net/official';
 
 export interface OfficialTeamScreenProps {
@@ -40,6 +43,10 @@ export function OfficialTeamScreen({ conn, uuid, onChanged }: OfficialTeamScreen
   }, []);
   const [error, setError] = useState('');
   const [okMsg, setOkMsg] = useState('');
+  /** 邀请目标 UUID 输入；空串表示不邀请。 */
+  const [inviteTarget, setInviteTarget] = useState('');
+  /** 待确认的合队信息：非空时该官方队伍展示确认条并暂停接受。 */
+  const [pending, setPending] = useState<{ team: OfficialTeam; info: NeedConfirm } | null>(null);
 
   const load = useCallback(async () => {
     setError('');
@@ -111,6 +118,56 @@ export function OfficialTeamScreen({ conn, uuid, onChanged }: OfficialTeamScreen
     }
   };
 
+  /** 官方写入的统一收口：错误码走 officialErrorText，NEEDS_CONFIRM 转确认条。 */
+  const write = async (op: string, team: OfficialTeam, extra: Record<string, unknown>,
+      doneText: string): Promise<boolean> => {
+    if (busyRef.current) return false;
+    busyRef.current = true;
+    setBusy(true);
+    setError('');
+    setOkMsg('');
+    try {
+      const res: Res = await conn.req(op, {
+        uuid, teamId, nodeId: team.nodeId, worldRef: team.worldRef,
+        officialTeamId: team.officialTeamId, ...extra,
+      });
+      if (res.ok) {
+        setOkMsg(doneText);
+        setPending(null);
+        if (mounted.current) onChanged?.();
+        await load();
+        return true;
+      }
+      const confirm = parseNeedConfirm(res.b);
+      if (confirm != null) {
+        setPending({ team, info: confirm });
+        return false;
+      }
+      const friendly = officialErrorText(res.m ?? '');
+      setError(`${op}: ${friendly ?? res.m ?? '失败'}`);
+      return false;
+    } catch (e: any) {
+      setError(e.message ?? String(e));
+      return false;
+    } finally {
+      busyRef.current = false;
+      if (mounted.current) setBusy(false);
+    }
+  };
+
+  const invite = (team: OfficialTeam) => {
+    const target = inviteTarget.trim();
+    if (target === '') {
+      setError('请先填写要邀请的玩家 UUID');
+      return;
+    }
+    void write('team.official.invite', team, { targetUuid: target }, `已下发邀请：${target}`);
+  };
+
+  const accept = (team: OfficialTeam, confirm: boolean) => {
+    void write('team.official.accept', team, { confirm }, '已下发接受入队请求');
+  };
+
   const bind = (candidate: MapCandidate) => {
     if (teamId == null) return;
     void run('team.map.set', {
@@ -133,7 +190,7 @@ export function OfficialTeamScreen({ conn, uuid, onChanged }: OfficialTeamScreen
       <View style={styles.headRow}>
         <View>
           <Text style={styles.title}>{heading}</Text>
-          <Text style={styles.sub}>GTNHLib 官方队伍只读投影，成员与管理在游戏内进行</Text>
+          <Text style={styles.sub}>官方队伍投影只读；邀请与接受走官方动作，其余管理在游戏内进行</Text>
         </View>
         <GhostButton label={busy ? '刷新中…' : '刷新'} icon="refresh" tone="neutral"
           disabled={busy} onPress={() => void load()} />
@@ -201,7 +258,31 @@ export function OfficialTeamScreen({ conn, uuid, onChanged }: OfficialTeamScreen
                   {member} · {roleText('member')}{rolesOf(team, uuid).includes('member') && member === uuid ? '（当前身份）' : ''}
                 </Text>
               ))}
+            {pending != null && pending.team.officialTeamId === team.officialTeamId
+              && pending.team.worldRef === team.worldRef && (
+              <View style={[styles.msgBox, { backgroundColor: colors.warnSoft, borderColor: colors.warn + '55' }]}>
+                <Text style={[styles.msgText, { color: colors.warn }]}>{needConfirmText(pending.info)}</Text>
+                <View style={styles.actRow}>
+                  <GhostButton label="确认接受并合队" icon="checkmark-outline" tone="bad" disabled={busy}
+                    onPress={() => accept(team, true)} />
+                  <GhostButton label="取消" icon="close-outline" tone="neutral" disabled={busy}
+                    onPress={() => setPending(null)} />
+                </View>
+              </View>
+            )}
+            {canInvite(team, uuid) && (
+              <View style={styles.inviteRow}>
+                <View style={{ flex: 1 }}>
+                  <StyledInput value={inviteTarget} onChangeText={setInviteTarget}
+                    placeholder="被邀请玩家的 UUID" />
+                </View>
+                <GhostButton label="邀请" icon="person-add-outline" tone="accent" disabled={busy}
+                  onPress={() => invite(team)} />
+              </View>
+            )}
             <View style={styles.actRow}>
+              <GhostButton label="接受邀请入队" icon="enter-outline" tone="accent" disabled={busy}
+                onPress={() => accept(team, false)} />
               <GhostButton label="取消绑定" icon="unlink-outline" tone="neutral" disabled={busy}
                 onPress={() => unbind({
                   nodeId: team.nodeId, worldRef: team.worldRef, officialTeamId: team.officialTeamId,
@@ -262,5 +343,6 @@ const styles = themedStyles(() => ({
   actRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s, marginTop: spacing.s },
   linkHint: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, marginTop: spacing.m },
   hint: { color: colors.textFaint, fontSize: 12, lineHeight: 18, flex: 1 },
+  inviteRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, marginTop: spacing.s },
   candRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, marginTop: spacing.m },
 }));
