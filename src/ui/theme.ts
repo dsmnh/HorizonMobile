@@ -6,7 +6,7 @@
  *
  * 屏幕层的用法：
  *   const styles = themedStyles(() => ({ root: { backgroundColor: colors.bg } }));
- * 主题切换后由 `rev` 触发重建，屏幕无需自行监听；App 根以 key 重挂导航树，保证已缓存样式一起刷新。
+ * 主题切换后由 `rev` 触发重建，屏幕无需自行监听；导航树保持挂载，以保留页面和草稿。
  * 旧屏幕仍在用 card/muted/faint/primary/primaryText/danger 这几个别名，此处保留映射，避免一次性改动全部屏幕。
  */
 import { useSyncExternalStore } from 'react';
@@ -62,7 +62,7 @@ export const DARK: Palette = {
   border: '#232A38',
   text: '#E8ECF3',
   textDim: '#9AA4B8',
-  textFaint: '#5C6577',
+  textFaint: '#8E9BAF',
   accent: '#22D3EE',
   accent2: '#A78BFA',
   accentSoft: 'rgba(34,211,238,0.14)',
@@ -90,7 +90,7 @@ export const LIGHT: Palette = {
   border: '#D5DDE8',
   text: '#111827',
   textDim: '#4A5568',
-  textFaint: '#8592A6',
+  textFaint: '#546278',
   accent: '#0E7490',
   accent2: '#6D28D9',
   accentSoft: 'rgba(14,116,144,0.10)',
@@ -108,6 +108,13 @@ export const LIGHT: Palette = {
   primaryText: '#0E7490',
   danger: '#DC2626',
 };
+
+export const typography = {
+  title: { fontSize: 22, fontWeight: '700' },
+  body: { fontSize: 14 },
+  caption: { fontSize: 12 },
+  metric: { fontSize: 20, fontWeight: '700', fontVariant: ['tabular-nums'] },
+} satisfies Record<string, TextStyle>;
 
 export const spacing = { xs: 4, s: 8, m: 12, l: 16, xl: 24, xxl: 32 } as const;
 export const radius = { s: 8, m: 12, l: 16, full: 999 } as const;

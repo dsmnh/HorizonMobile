@@ -12,10 +12,12 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { HorizonConn, type Transport } from './src/net/conn';
 import { RnTransport } from './src/net/transport-rn';
 import { preauthOp } from './src/net/preauth';
-import { normalizeUuids } from './src/net/identity';
+import { normalizeIdentities, type PlayerIdentity } from './src/net/identity';
 import { saveLastConn } from './src/ui/lastConn';
 import { AppContext, type RootStackParamList } from './src/ui/nav';
-import { LoginRoute, HomeRoute, TeamRoute, ChatRoute, MonitorRoute, SessionRoute, MeRoute, BqRoute, SettingsRoute } from './src/ui/routes';
+import { LoginRoute, BindRoute, TeamRoute, SessionRoute, MonitorRoute, ServerToolsRoute, ProfileRoute, BqRoute, SettingsRoute } from './src/ui/routes';
+import { ChatStyleRoute } from './src/ui/ChatStyleRoute';
+import { MainTabs } from './src/ui/MainTabs';
 import { setThemeMode, useTheme, type ThemeMode } from './src/ui/theme';
 
 const THEME_KEY = 'horizon.theme.mode';
@@ -40,7 +42,11 @@ export default function App(): JSX.Element {
   const { colors, mode } = useTheme();
   const [conn, setConn] = useState<HorizonConn | null>(null);
   const [connected, setConnected] = useState(false);
-  const [uuids, setUuids] = useState<string[]>([]);
+  const [identities, setIdentities] = useState<PlayerIdentity[]>([]);
+  const uuids = identities.map(({ uuid }) => uuid);
+  const [account, setAccount] = useState('');
+  const [selectedUuid, setActiveUuid] = useState('');
+  const activeUuid = uuids.includes(selectedUuid) ? selectedUuid : (uuids[0] ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -65,11 +71,10 @@ export default function App(): JSX.Element {
     AsyncStorage.setItem(THEME_KEY, mode).catch(() => undefined);
   }, [mode, themeLoaded]);
 
-  // conn 的常驻重连循环自动恢复；这里只把 isConnected 的可见状态以低频同步到 UI
   useEffect(() => {
     if (!conn) return undefined;
-    const t = setInterval(() => setConnected(conn.isConnected), 2000);
-    return () => clearInterval(t);
+    setConnected(conn.isConnected);
+    return conn.onConnectionChange(setConnected);
   }, [conn]);
 
   useEffect(() => () => conn?.close(), [conn]);
@@ -78,19 +83,18 @@ export default function App(): JSX.Element {
     async (host: string, port: number, mode: 'login' | 'register', name: string, pass: string, tls: boolean) => {
       setBusy(true);
       setError('');
+      let session: HorizonConn | undefined;
       // 预鉴权与会话共用同一 TLS 判定：后端 App 平面启用 TLS 时明文连接会被直接断开（契约 §9.1）
       const tlsOpts = tls ? { enabled: true } : undefined;
       try {
         const res = await preauthOp(new RnTransport() as Transport, host, port,
           mode === 'login' ? 'account.login' : 'account.register', { name, pass }, 15_000, tlsOpts);
-        // 会话结果里的绑定身份同样是对象条目，登录后直接归一化，省一次 account.uuids 往返
-        setUuids(normalizeUuids(res.b?.uuids));
         if (!res.ok || !res.b?.token) {
           setError(res.m ?? '鉴权失败');
           return;
         }
         void saveLastConn({ host, port, name, tls });
-        const c = new HorizonConn(new RnTransport() as Transport, {
+        const c = session = new HorizonConn(new RnTransport() as Transport, {
           host, port, token: res.b.token, tls,
           onFatal: (code) => {
             // 终止性错误（指纹变化、帧标记降级）不自动重连，必须给出可操作提示
@@ -101,10 +105,13 @@ export default function App(): JSX.Element {
         });
         await c.start();
         const u = await c.req('account.uuids');
-        setUuids(u.ok ? normalizeUuids(u.b?.uuids) : []);
+        setIdentities(normalizeIdentities(u.ok ? u.b?.uuids : res.b?.uuids));
+        setAccount(name);
+        setActiveUuid('');
         setConn(c);
         setConnected(true);
       } catch (e: any) {
+        session?.close();
         // 预鉴权阶段的终止性错误（如服务端换证导致指纹不匹配）同样换成可操作文案
         const msg = String((e && e.message) ?? e ?? '');
         setError(fatalText(msg) ?? (msg || '未知异常'));
@@ -133,7 +140,9 @@ export default function App(): JSX.Element {
     conn?.close();
     setConn(null);
     setConnected(false);
-    setUuids([]);
+    setIdentities([]);
+    setAccount('');
+    setActiveUuid('');
   }, [conn]);
 
   // 导航主题与页面底色跟随调色板；theme 变化会就地重绘，不可用 key 重挂——重挂会把导航栈退回首屏
@@ -151,11 +160,10 @@ export default function App(): JSX.Element {
   };
 
   return (
-    <AppContext.Provider value={{ conn, connected, uuids, setUuids, authenticate, resetPassword, disconnect, busy, error }}>
+    <AppContext.Provider value={{ conn, account, activeUuid, setActiveUuid, connected, uuids, identities, setIdentities, authenticate, resetPassword, disconnect, busy, error }}>
       <StatusBar barStyle={mode === 'dark' ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
       <NavigationContainer theme={navTheme}>
         <Stack.Navigator
-          initialRouteName={conn ? 'Home' : 'Login'}
           screenOptions={{
             headerStyle: { backgroundColor: colors.bg },
             headerTintColor: colors.text,
@@ -164,15 +172,22 @@ export default function App(): JSX.Element {
             contentStyle: { backgroundColor: colors.bg },
           }}
         >
-          <Stack.Screen name="Login" component={LoginRoute} options={{ headerShown: false }} />
-          <Stack.Screen name="Home" component={HomeRoute} options={{ headerShown: false }} />
-          <Stack.Screen name="Team" component={TeamRoute} options={{ title: '队伍' }} />
-          <Stack.Screen name="Chat" component={ChatRoute} options={{ title: '聊天' }} />
-          <Stack.Screen name="Monitor" component={MonitorRoute} options={{ title: '监控' }} />
-          <Stack.Screen name="Session" component={SessionRoute} options={{ title: '会话' }} />
-          <Stack.Screen name="Me" component={MeRoute} options={{ title: 'ME 设备' }} />
-          <Stack.Screen name="Bq" component={BqRoute} options={{ title: 'BQ 同步' }} />
-          <Stack.Screen name="Settings" component={SettingsRoute} options={{ title: '设置' }} />
+          {conn ? (
+            <Stack.Group navigationKey="authenticated">
+              <Stack.Screen name="Main" component={MainTabs} options={{ headerShown: false }} />
+              <Stack.Screen name="Bind" component={BindRoute} options={{ title: '绑定身份' }} />
+              <Stack.Screen name="ChatStyle" component={ChatStyleRoute} options={{ title: '聊天样式' }} />
+              <Stack.Screen name="Team" component={TeamRoute} options={{ title: '队伍' }} />
+              <Stack.Screen name="Session" component={SessionRoute} options={{ title: '会话' }} />
+              <Stack.Screen name="Monitor" component={MonitorRoute} options={{ title: '监控' }} />
+              <Stack.Screen name="ServerTools" component={ServerToolsRoute} options={{ title: '服务器管理' }} />
+              <Stack.Screen name="Profile" component={ProfileRoute} options={{ title: '我的' }} />
+              <Stack.Screen name="Bq" component={BqRoute} options={{ title: 'BQ 同步' }} />
+              <Stack.Screen name="Settings" component={SettingsRoute} options={{ title: '设置' }} />
+            </Stack.Group>
+          ) : (
+            <Stack.Screen name="Login" component={LoginRoute} options={{ headerShown: false }} />
+          )}
         </Stack.Navigator>
       </NavigationContainer>
     </AppContext.Provider>

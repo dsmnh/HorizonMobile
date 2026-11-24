@@ -1,105 +1,115 @@
-/**
- * 聊天屏（迁移适配指南 §ChatScreen 深化）：公开/私聊双频道 + 好友与屏蔽管理。
- * 协议面：chat.history（scope: public|private + peer）、chat.public.send / chat.private.send、
- * friend.request/remove/accept、block.set（契约 1.4.0 §聊天域）。
- * 私聊事件按发送/接收双方过滤；发送者回显经流送达，UI 不双份追加。
- * 视觉对齐 AEMobileApp：频道分段器 + 气泡列表 + 底部输入条。
- */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing, themedStyles, useTheme } from './theme';
-import { Card, Chip, EmptyState, GhostButton, PrimaryButton, SectionLabel, Segmented, StyledInput } from './components';
-import { HorizonConn, type Stream, type TeamEvent } from '../net/conn';
-import { fromEvent, fromHistory, isRelevant } from '../net/chat-merge';
+import { FlatList, Modal, ScrollView, StyleSheet, View } from 'react-native';
+import { spacing, useTheme } from './theme';
+import { Card, EmptyState, GhostButton, PageHeader, PrimaryButton, SectionLabel, Segmented, StateNotice, StyledInput } from './components';
+import type { HorizonConn } from '../net/conn';
+import { fromEvent, fromHistory, isRelevant, mergeHistory, type ChatMessage } from '../net/chat-merge';
+import { useChatStyle } from './chatStyle';
+import { chatDay, ChatDate, ChatMessageRow } from './ChatMessages';
 
-interface ChatMessage {
-  mid: number | string;
-  from: string;
-  text: string;
-  ts?: number;
-}
+type Channel = { scope: 'public' | 'private'; peer: string };
+const publicChannel: Channel = { scope: 'public', peer: '' };
 
-export interface ChatScreenProps {
-  conn: HorizonConn;
-  uuid: string;
-}
-
-export function ChatScreen({ conn, uuid }: ChatScreenProps): JSX.Element {
-  const { colors: c } = useTheme();
-  const [scope, setScope] = useState<'public' | 'private'>('public');
+export function ChatScreen({ conn, uuid, connected }: { conn: HorizonConn; uuid: string; connected: boolean }): JSX.Element {
+  const { colors } = useTheme();
+  const mode = useChatStyle();
+  const [scope, setScope] = useState<Channel['scope']>('public');
+  const [peerInput, setPeerInput] = useState('');
   const [peer, setPeer] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [draft, setDraft] = useState('');
+  const channel = scope === 'public' ? publicChannel : { scope, peer };
+  const channelKey = scope === 'public' ? 'public' : `private:${peer}`;
+  const [store, setStore] = useState<Record<string, ChatMessage[]>>({});
+  const messages = store[channelKey] ?? [];
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const draft = drafts[channelKey] ?? '';
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [unseen, setUnseen] = useState(false);
+  const [expanded, setExpanded] = useState<string>();
+  const [showContacts, setShowContacts] = useState(false);
   const [friendOp, setFriendOp] = useState('');
   const [requestId, setRequestId] = useState('');
-  const [error, setError] = useState('');
   const [okMsg, setOkMsg] = useState('');
-  const [sending, setSending] = useState(false);
-  const streamRef = useRef<Stream | null>(null);
-  const listRef = useRef<FlatList<ChatMessage> | null>(null);
-
-  const loadHistory = useCallback(async (curScope: 'public' | 'private', curPeer: string) => {
-    setError('');
-    try {
-      // 私聊历史必须带 peer，未填时不发请求（后端按 BAD_PARAMS:peer 拒绝）
-      if (curScope === 'private' && !curPeer.trim()) {
-        setMessages([]);
-        return;
-      }
-      const res = await conn.req('chat.history', curScope === 'private'
-        ? { uuid, scope: 'private', peer: curPeer.trim(), limit: 50 }
-        : { uuid, scope: 'public', limit: 50 });
-      if (res.ok) {
-        const list = Array.isArray(res.b?.messages) ? res.b.messages : [];
-        setMessages(list.map(fromHistory).reverse());
-      } else {
-        setError(res.m ?? 'chat.history 失败');
-      }
-    } catch (e: any) {
-      setError(e.message ?? String(e));
-    }
-  }, [conn, uuid]);
+  const friendBusy = useRef(false);
+  const sendBusy = useRef(false);
+  const historyRequest = useRef(0);
+  const fallbackSeq = useRef(0);
+  const atEnd = useRef(true);
+  const list = useRef<FlatList<ChatMessage>>(null);
+  const selected = useRef({ channel, channelKey });
+  selected.current = { channel, channelKey };
 
   useEffect(() => {
     const stream = conn.subscribeStream('chat', { uuid });
-    streamRef.current = stream;
-    stream.addEventListener((e: TeamEvent) => {
-      if (e.k === 'msg' && isRelevant(e as any, scope, peer, uuid)) {
-        setMessages((prev) => [...prev, fromEvent(e as any, prev.length + 1)]);
-      }
+    stream.addEventListener((event) => {
+      const { channel: current, channelKey: key } = selected.current;
+      if (event.k !== 'msg' || !isRelevant(event, current.scope, current.peer, uuid)) return;
+      const message = fromEvent(event, ++fallbackSeq.current);
+      setStore((previous) => {
+        const items = previous[key] ?? [];
+        if (items.some((item) => item.key === message.key)) return previous;
+        return { ...previous, [key]: [...items, message].slice(-250) };
+      });
+      if (!atEnd.current) setUnseen(true);
     });
-    void loadHistory(scope, peer);
-    return () => {
-      stream.close();
-      streamRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conn, uuid, scope, peer]);
+    return () => stream.close();
+  }, [conn, uuid]);
 
-  const send = useCallback(async () => {
+  const loadHistory = useCallback(async () => {
+    if (!conn.isConnected || (scope === 'private' && !peer)) return;
+    const request = ++historyRequest.current;
+    setLoading(true);
+    setError('');
+    try {
+      const res = await conn.req('chat.history', { uuid, scope, ...(scope === 'private' ? { peer } : {}), limit: 50 });
+      if (request !== historyRequest.current || channelKey !== selected.current.channelKey) return;
+      if (!res.ok) throw new Error(res.m ?? '读取聊天历史失败');
+      const history: ChatMessage[] = Array.isArray(res.b?.messages) ? res.b.messages.map(fromHistory).reverse() : [];
+      setStore((previous) => ({ ...previous, [channelKey]: mergeHistory(history, previous[channelKey] ?? []) }));
+    } catch (cause) {
+      if (request === historyRequest.current && channelKey === selected.current.channelKey) setError(String((cause as Error).message ?? cause));
+    } finally {
+      if (request === historyRequest.current) setLoading(false);
+    }
+  }, [conn, uuid, scope, peer, channelKey]);
+
+  useEffect(() => {
+    setExpanded(undefined);
+    atEnd.current = true;
+    setUnseen(false);
+    setError('');
+  }, [channelKey]);
+
+  useEffect(() => {
+    if (connected) void loadHistory();
+    else setLoading(false);
+    return () => { historyRequest.current += 1; };
+  }, [connected, loadHistory]);
+
+  const send = async () => {
     const text = draft.trim();
-    if (!text || sending) return;
-    if (scope === 'private' && !peer.trim()) return;
+    if (!text || !conn.isConnected || sendBusy.current || (scope === 'private' && !peer)) return;
+    sendBusy.current = true;
     setSending(true);
     setError('');
     try {
-      const res = scope === 'private'
-        ? await conn.req('chat.private.send', { uuid, to: peer.trim(), text })
-        : await conn.req('chat.public.send', { uuid, text });
-      if (!res.ok) {
-        setError(res.m ?? '发送失败');
-      } else {
-        setDraft('');
-        // 双方经 chat 流收到回显事件；此处不本地追加，避免双份
-      }
-    } catch (e: any) {
-      setError(e.message ?? String(e));
+      const res = await (scope === 'private'
+        ? conn.req('chat.private.send', { uuid, to: peer, text })
+        : conn.req('chat.public.send', { uuid, text }));
+      if (!res.ok) throw new Error(res.m ?? '发送失败');
+      setDrafts((previous) => previous[channelKey] === draft ? { ...previous, [channelKey]: '' } : previous);
+    } catch (cause) {
+      if (channelKey === selected.current.channelKey) setError(String((cause as Error).message ?? cause));
     } finally {
+      sendBusy.current = false;
       setSending(false);
     }
-  }, [conn, uuid, draft, sending, scope, peer]);
+  };
 
   const friendAction = async (op: string, p: Record<string, unknown>, done: string) => {
+    if (friendBusy.current || !conn.isConnected) return;
+    friendBusy.current = true;
     setError('');
     setOkMsg('');
     try {
@@ -116,83 +126,66 @@ export function ChatScreen({ conn, uuid }: ChatScreenProps): JSX.Element {
       }
     } catch (e: any) {
       setError(e.message ?? String(e));
+    } finally {
+      friendBusy.current = false;
     }
   };
 
-  const canOp = friendOp.trim() !== '';
-
+  const canOp = friendOp.trim() !== '' && connected;
   return (
     <View style={styles.wrap}>
-      <View style={styles.headRow}>
-        <Segmented
-          options={[
-            { value: 'public', label: '公聊', icon: 'globe-outline' },
-            { value: 'private', label: '私聊', icon: 'lock-closed-outline' },
-          ]}
-          value={scope}
-          onChange={(v) => { setScope(v); void loadHistory(v, peer); }}
-        />
+      <PageHeader title="聊天" connected={connected} onRefresh={() => void loadHistory()} refreshing={loading} />
+      <View style={styles.controls}>
+        <View style={{ flex: 1 }}><Segmented value={scope} onChange={setScope} options={[
+          { value: 'public', label: '公聊', icon: 'globe-outline' }, { value: 'private', label: '私聊', icon: 'lock-closed-outline' },
+        ]} /></View>
+        <GhostButton label="好友" icon="people-outline" onPress={() => { setOkMsg(''); setError(''); setShowContacts(true); }} />
       </View>
-
-      {scope === 'private' && (
-        <View style={{ marginTop: spacing.s }}>
-          <StyledInput
-            value={peer}
-            onChangeText={setPeer}
-            placeholder="对方 UUID"
-            onSubmitEditing={() => void loadHistory('private', peer)}
-          />
-        </View>
-      )}
-
-      {error !== '' && (
-        <View style={[styles.msgBox, { backgroundColor: c.badSoft, borderColor: c.bad + '55' }]}>
-          <Text style={[styles.msgText, { color: c.bad }]}>{error}</Text>
-        </View>
-      )}
-      {okMsg !== '' && (
-        <View style={[styles.msgBox, { backgroundColor: c.okSoft, borderColor: c.ok + '55' }]}>
-          <Text style={[styles.msgText, { color: c.ok }]}>{okMsg}</Text>
-        </View>
-      )}
-
-      <Card style={styles.listCard}>
-        <FlatList
-          ref={listRef}
-          data={messages}
-          keyExtractor={(m) => String(m.mid)}
-          style={styles.list}
-          contentContainerStyle={{ paddingBottom: spacing.s }}
-          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
-          renderItem={({ item }) => (
-            <View style={[styles.bubble, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}>
-              <Text style={styles.bubbleFrom} numberOfLines={1}>{item.from}</Text>
-              <Text style={styles.bubbleText}>{item.text}</Text>
-            </View>
-          )}
-          ListEmptyComponent={
-            <EmptyState
-              icon="chatbubble-ellipses-outline"
-              title={scope === 'private' ? '暂无该会话消息' : '暂无消息'}
-              subtitle={scope === 'private' ? '填写对方 UUID 后拉取历史' : '在下方输入框发送第一条公聊'}
-            />
-          }
-        />
-      </Card>
-
-      <View style={styles.sendRow}>
-        <StyledInput
-          value={draft}
-          onChangeText={setDraft}
-          placeholder={scope === 'private' ? '私聊发送…' : '发送到公共频道…'}
-          editable={!sending}
-          style={{ flex: 1 }}
-        />
-        <PrimaryButton label="发送" icon="send" onPress={() => void send()} loading={sending} />
+      {scope === 'private' && <View style={styles.controls}>
+        <StyledInput value={peerInput} onChangeText={setPeerInput} placeholder="对方 UUID" style={{ flex: 1 }}
+          onSubmitEditing={() => setPeer(peerInput.trim())} />
+        <GhostButton label="打开会话" disabled={!peerInput.trim()} onPress={() => setPeer(peerInput.trim())} />
+      </View>}
+      {scope === 'private' && peer && <SectionLabel text={`私聊对象 · ${peer}`} />}
+      {!connected && <StateNotice>连接中断，保留已加载消息和草稿</StateNotice>}
+      {!showContacts && error !== '' && <StateNotice tone="bad">{error}</StateNotice>}
+      {loading && messages.length === 0 && <StateNotice tone="neutral" loading>正在读取聊天历史</StateNotice>}
+      <FlatList key={channelKey} ref={list} data={messages} keyExtractor={(message) => message.key} style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: spacing.s }} scrollEventThrottle={32}
+        onScroll={({ nativeEvent: { contentOffset, contentSize, layoutMeasurement } }) => {
+          atEnd.current = contentSize.height - contentOffset.y - layoutMeasurement.height < 56;
+          if (atEnd.current) setUnseen(false);
+        }}
+        onContentSizeChange={() => { if (messages.length > 0 && atEnd.current) list.current?.scrollToEnd({ animated: false }); }}
+        renderItem={({ item, index }) => {
+          const previous = messages[index - 1];
+          const date = chatDay(item.ts);
+          const newDay = Boolean(date && date !== chatDay(previous?.ts));
+          const grouped = !newDay && previous?.from === item.from && previous.server === item.server
+            && previous.team === item.team && previous.world === item.world && previous.name === item.name
+            && (item.ts ?? 0) - (previous.ts ?? 0) <= ((item.ts ?? 0) >= 1e12 ? 60000 : 60);
+          return <>{newDay && date && <ChatDate date={date} />}
+            <ChatMessageRow message={item} mine={item.from === uuid} grouped={grouped} mode={mode}
+              expanded={expanded === item.key} onToggle={() => setExpanded((key) => key === item.key ? undefined : item.key)} />
+          </>;
+        }}
+        ListEmptyComponent={!loading && !error ? <EmptyState icon="chatbubble-ellipses-outline"
+          title={connected ? '暂无消息' : '暂无已加载消息'} subtitle={scope === 'private' && !peer ? '输入对方 UUID 并打开会话' : undefined} /> : null} />
+      {unseen && <GhostButton label="查看新消息" icon="arrow-down" onPress={() => {
+        atEnd.current = true; setUnseen(false); list.current?.scrollToEnd({ animated: true });
+      }} />}
+      <View style={styles.controls}>
+        <StyledInput value={draft} onChangeText={(text) => setDrafts((previous) => ({ ...previous, [channelKey]: text }))}
+          placeholder={scope === 'private' ? '输入私聊消息' : '输入公聊消息'} style={{ flex: 1 }} />
+        <PrimaryButton label="发送" icon="send" loading={sending} disabled={!connected || !draft.trim() || (scope === 'private' && !peer)}
+          onPress={() => void send()} />
       </View>
-
-      <SectionLabel text="好友与屏蔽" right={<Chip label={scope === 'private' ? '私聊' : '公聊'} tone="accent2" />} />
-      <Card>
+      <Modal visible={showContacts} onRequestClose={() => setShowContacts(false)} animationType="slide">
+        <ScrollView style={[styles.wrap, { backgroundColor: colors.bg }]} keyboardShouldPersistTaps="handled">
+          <PageHeader title="好友与屏蔽" connected={connected} />
+          {error !== '' && <StateNotice tone="bad">{error}</StateNotice>}
+          {okMsg !== '' && <StateNotice tone="neutral">{okMsg}</StateNotice>}
+          <Card>
         <StyledInput value={friendOp} onChangeText={setFriendOp} placeholder="目标玩家 UUID" />
         <View style={styles.chipRow}>
           <GhostButton label="加好友" icon="person-add-outline" disabled={!canOp}
@@ -208,24 +201,19 @@ export function ChatScreen({ conn, uuid }: ChatScreenProps): JSX.Element {
           <StyledInput value={requestId} onChangeText={setRequestId} placeholder="好友请求 ID（接受）" />
         </View>
         <View style={{ marginTop: spacing.s }}>
-          <GhostButton label="接受好友请求" icon="checkmark-done-outline" disabled={requestId.trim() === ''}
+          <GhostButton label="接受好友请求" icon="checkmark-done-outline" disabled={!/^\d+$/.test(requestId.trim())}
             onPress={() => void friendAction('friend.accept', { requestId: Number(requestId) }, '已接受好友请求')} />
         </View>
-      </Card>
+          </Card>
+          <GhostButton label="返回聊天" icon="arrow-back" onPress={() => { setError(''); setShowContacts(false); }} />
+        </ScrollView>
+      </Modal>
     </View>
   );
 }
 
-const styles = themedStyles(() => ({
-  wrap: { flex: 1, padding: spacing.l },
-  headRow: { marginBottom: spacing.s },
-  msgBox: { marginTop: spacing.s, padding: spacing.m, borderRadius: radius.s, borderWidth: 1 },
-  msgText: { fontSize: 12, lineHeight: 17 },
-  listCard: { flex: 1, marginTop: spacing.s, padding: spacing.s },
-  list: { flexGrow: 1 },
-  bubble: { borderRadius: radius.m, borderWidth: 1, paddingVertical: 8, paddingHorizontal: spacing.m, marginBottom: 6 },
-  bubbleFrom: { color: colors.textFaint, fontSize: 10 },
-  bubbleText: { color: colors.text, fontSize: 14, marginTop: 2, lineHeight: 20 },
-  sendRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, marginTop: spacing.s },
+const styles = StyleSheet.create({
+  wrap: { flex: 1, paddingHorizontal: spacing.l, paddingTop: spacing.m, paddingBottom: spacing.s },
+  controls: { flexDirection: 'row', alignItems: 'center', gap: spacing.s, marginBottom: spacing.s },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.s, marginTop: spacing.s },
-}));
+});

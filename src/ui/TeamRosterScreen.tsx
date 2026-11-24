@@ -5,7 +5,7 @@
  * 权限差异由后端裁决（FORBIDDEN 原样展示）；队长独有 disband/transfer（企划书 04 权限口径）。
  * 视觉对齐 AEMobileApp：成员卡 + 角色胶囊 + 分组操作区。
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { colors, radius, spacing, themedStyles } from './theme';
 import {
@@ -36,6 +36,12 @@ export function TeamRosterScreen({ conn, uuid, onChanged }: TeamRosterScreenProp
   const [applyTeamId, setApplyTeamId] = useState('');
   const [applyId, setApplyId] = useState('');
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const [error, setError] = useState('');
   const [okMsg, setOkMsg] = useState('');
 
@@ -67,7 +73,8 @@ export function TeamRosterScreen({ conn, uuid, onChanged }: TeamRosterScreenProp
   }, [load]);
 
   const run = async (op: string, p: Record<string, unknown>, doneText: string) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError('');
     setOkMsg('');
@@ -75,7 +82,7 @@ export function TeamRosterScreen({ conn, uuid, onChanged }: TeamRosterScreenProp
       const res: Res = await conn.req(op, { uuid, ...p });
       if (res.ok) {
         setOkMsg(doneText);
-        onChanged?.();
+        if (mounted.current) onChanged?.();
         await load();
       } else {
         setError(`${op}: ${res.m ?? '失败'}`);
@@ -83,6 +90,7 @@ export function TeamRosterScreen({ conn, uuid, onChanged }: TeamRosterScreenProp
     } catch (e: any) {
       setError(e.message ?? String(e));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };

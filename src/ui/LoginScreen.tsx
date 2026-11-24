@@ -3,7 +3,7 @@
  * 协议面：预鉴权 account.login / account.register / account.resetPassword（src/net/preauth.ts）。
  * 视觉对齐 AEMobileApp：品牌头 + 卡片式表单 + 主/次按钮。
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -44,6 +44,7 @@ export function LoginScreen({ onAuthenticate, onResetPassword, busy, error }: Lo
   const [recoverCode, setRecoverCode] = useState('');
   const [newPass, setNewPass] = useState('');
   const [resetMsg, setResetMsg] = useState('');
+  const resetBusyRef = useRef(false);
   // 后端 App 平面启用 TLS 时明文连接会被断开；默认开启，本地明文联调可关闭（契约 §9.1）
   const [tls, setTls] = useState(true);
   const [pinMsg, setPinMsg] = useState('');
@@ -85,14 +86,22 @@ export function LoginScreen({ onAuthenticate, onResetPassword, busy, error }: Lo
   };
 
   const submitReset = async () => {
+    if (busy || resetBusyRef.current) return;
     const p = parseInt(port, 10);
     if (!host || !p || !recoverCode.trim() || !newPass) {
       setResetMsg('需填写后端地址、恢复码与新密码');
       return;
     }
+    resetBusyRef.current = true;
     setResetMsg('处理中…');
-    const failure = await onResetPassword(host, p, recoverCode.trim(), newPass, tls);
-    setResetMsg(failure || '密码已重设；该账号全部会话已注销，请用新密码登录');
+    try {
+      const failure = await onResetPassword(host, p, recoverCode.trim(), newPass, tls);
+      setResetMsg(failure || '密码已重设；该账号全部会话已注销，请用新密码登录');
+    } catch (e: any) {
+      setResetMsg(String(e.message ?? e));
+    } finally {
+      resetBusyRef.current = false;
+    }
   };
 
   if (!loaded) {

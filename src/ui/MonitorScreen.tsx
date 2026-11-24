@@ -7,10 +7,11 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { colors, radius, spacing, themedStyles } from './theme';
+import { useIsFocused } from '@react-navigation/native';
+import { colors, spacing, themedStyles } from './theme';
 import {
   Card, Chip, EmptyState, GhostButton, PrimaryButton, ProgressBar,
-  SectionLabel, SettingsGroup, SettingsRow, StatusDot, StyledInput,
+  PageHeader, SectionLabel, StateNotice, StatusDot, StyledInput,
 } from './components';
 import { HorizonConn, type Res } from '../net/conn';
 
@@ -19,11 +20,12 @@ interface NodeFrame {
   name?: string;
   offline?: boolean;
   frame?: {
+    at?: number;
     mspt: number;
     max?: number;
     tps: number;
     players: number;
-    dims?: { id: number; name: string; players: number; mspt: number }[];
+    dims?: { id: number; name: string; players: number; mspt?: number }[];
   };
 }
 
@@ -31,9 +33,20 @@ export interface MonitorScreenProps {
   conn: HorizonConn;
   /** 当前选中的绑定身份；rank.sync 按 UUID 每日限次，缺省时禁用该入口。 */
   uuid?: string;
+  connected: boolean;
+  management?: boolean;
 }
 
-export function MonitorScreen({ conn, uuid = '' }: MonitorScreenProps): JSX.Element {
+type Sample = { ts: number; tps: number; mspt: number };
+
+export function MonitorScreen({ conn, uuid = '', connected, management = false }: MonitorScreenProps): JSX.Element {
+  const focused = useIsFocused();
+  const [refreshing, setRefreshing] = useState(false);
+  const [received, setReceived] = useState(false);
+  const [samples, setSamples] = useState<Record<number, Sample[]>>({});
+  const inFlight = useRef(false);
+  const operation = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [nodes, setNodes] = useState<NodeFrame[]>([]);
   const [error, setError] = useState('');
   const [polling, setPolling] = useState(true);
@@ -42,9 +55,12 @@ export function MonitorScreen({ conn, uuid = '' }: MonitorScreenProps): JSX.Elem
   const [opTarget, setOpTarget] = useState('');
   const [opNodeId, setOpNodeId] = useState('');
   const [opMsg, setOpMsg] = useState('');
-  const timerRef = useRef<any>(null);
+
 
   const applyOpSet = async (grant: boolean) => {
+    if (operation.current || !conn.isConnected) return;
+    operation.current = true;
+    setBusy(true);
     setOpMsg('');
     try {
       const res: Res = await conn.req('admin.opSet', {
@@ -57,64 +73,99 @@ export function MonitorScreen({ conn, uuid = '' }: MonitorScreenProps): JSX.Elem
         : `admin.opSet: ${res.m ?? '失败'}`);
     } catch (e: any) {
       setOpMsg(String(e.message ?? e));
+    } finally {
+      operation.current = false;
+      setBusy(false);
     }
   };
 
   const refresh = useCallback(async () => {
+    if (!conn.isConnected || inFlight.current) return;
+    inFlight.current = true;
+    setRefreshing(true);
     setError('');
     try {
       const res: Res = await conn.req('metrics.network', {});
-      if (res.ok && Array.isArray(res.b?.nodes)) {
-        setNodes(res.b.nodes as NodeFrame[]);
-      } else {
-        setError(res.m ?? 'metrics.network 失败（需要 super/owner 账号）');
-        setNodes([]);
+      if (!res.ok || !Array.isArray(res.b?.nodes)) {
+        if (res.m === 'FORBIDDEN') {
+          setNodes([]);
+          setSamples({});
+        }
+        setError(res.m ?? '无法读取网络监控');
+        return;
       }
-    } catch (e: any) {
-      setError(e.message ?? String(e));
+      const incoming: NodeFrame[] = res.b.nodes;
+      setNodes((previous) => {
+        const cached = new Map(previous.map((node) => [node.nodeId, node.frame]));
+        return incoming.map((node) => ({ ...node, frame: node.frame ?? (node.offline ? cached.get(node.nodeId) : undefined) }));
+      });
+      setSamples((previous) => {
+        const next: Record<number, Sample[]> = {};
+        for (const node of incoming) {
+          const series = previous[node.nodeId] ?? [];
+          const frame = node.frame;
+          if (!node.offline && frame && typeof frame.at === 'number' && Number.isFinite(frame.at)
+            && Number.isFinite(frame.tps) && Number.isFinite(frame.mspt) && frame.at > (series[series.length - 1]?.ts ?? 0)) {
+            next[node.nodeId] = [...series, { ts: frame.at, tps: frame.tps, mspt: frame.mspt }].slice(-24);
+          } else {
+            next[node.nodeId] = series;
+          }
+        }
+        return next;
+      });
+      setReceived(true);
+    } catch (cause) {
+      if (conn.isConnected) setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      inFlight.current = false;
+      setRefreshing(false);
     }
   }, [conn]);
 
   useEffect(() => {
+    if (management || !connected || !focused) return;
     void refresh();
-    if (polling) {
-      timerRef.current = setInterval(() => void refresh(), 5000);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conn, polling]);
+    if (!polling) return;
+    const timer = setInterval(() => void refresh(), 5000);
+    return () => clearInterval(timer);
+  }, [management, connected, focused, polling, refresh]);
 
-  const online = nodes.filter((n) => !n.offline && !!n.frame);
+  const syncRank = async () => {
+    if (operation.current || !conn.isConnected) return;
+    operation.current = true;
+    setBusy(true);
+    setSyncMsg('');
+    try {
+      const res = await conn.req('rank.sync', { uuid, nodeId: Number(syncNodeId) });
+      setSyncMsg(res.ok ? '已加入同步队列' : res.m ?? '同步失败');
+    } catch (cause) {
+      setSyncMsg(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      operation.current = false;
+      setBusy(false);
+    }
+  };
+
+  const online = connected ? nodes.filter((node) => !node.offline && !!node.frame).length : 0;
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ paddingBottom: spacing.xxl }}>
+    <ScrollView style={styles.wrap} contentContainerStyle={{ paddingBottom: spacing.xxl }} keyboardShouldPersistTaps="handled">
+      {!management && <>
+      <PageHeader title="监控" connected={connected} onRefresh={() => void refresh()} refreshing={refreshing} />
       <View style={styles.headRow}>
-        <View>
-          <Text style={styles.title}>网络监控</Text>
-          <Text style={styles.sub}>在线节点 {online.length} / 共 {nodes.length}</Text>
-        </View>
-        <GhostButton
-          label={polling ? '暂停轮询' : '恢复轮询'}
-          icon={polling ? 'pause' : 'play'}
-          tone="neutral"
-          onPress={() => setPolling((v) => !v)}
-        />
+        <Text style={styles.sub}>{connected ? '在线节点 ' + online + ' / 共 ' + nodes.length : '缓存节点 ' + nodes.length}</Text>
+        <GhostButton label={polling ? '暂停轮询' : '恢复轮询'} icon={polling ? 'pause' : 'play'} tone="neutral"
+          disabled={!connected} onPress={() => setPolling((value) => !value)} />
       </View>
-
-      {error !== '' && (
-        <View style={[styles.errBox, { backgroundColor: colors.badSoft, borderColor: colors.bad + '55' }]}>
-          <Text style={[styles.errText, { color: colors.bad }]}>{error}</Text>
-        </View>
-      )}
-
-      {nodes.length === 0 && error === '' && (
-        <EmptyState icon="pulse-outline" title="网络内暂无活跃节点" subtitle="节点连上后端后会自动出现在这里" />
+      {!connected && <StateNotice>连接已中断，已读取的指标以缓存显示</StateNotice>}
+      {connected && error !== '' && <StateNotice tone="bad">{error}</StateNotice>}
+      {connected && !received && !error && <StateNotice tone="neutral" loading>正在读取节点指标</StateNotice>}
+      {connected && received && nodes.length === 0 && !error && (
+        <EmptyState icon="pulse-outline" title="暂无节点" subtitle="节点上报指标后会显示在这里" />
       )}
 
       {nodes.map((n) => {
-        const live = !n.offline && !!n.frame;
+        const live = connected && !n.offline && !!n.frame;
         const tps = n.frame?.tps ?? 0;
         const ratio = Math.max(0, Math.min(1, tps / 20));
         return (
@@ -124,10 +175,11 @@ export function MonitorScreen({ conn, uuid = '' }: MonitorScreenProps): JSX.Elem
                 <StatusDot ok={live} />
                 <Text style={styles.nodeName}>{n.name ?? `节点 ${n.nodeId}`}</Text>
               </View>
-              <Chip label={live ? '在线' : '离线'} tone={live ? 'ok' : 'warn'} />
+              <Chip label={live ? '在线' : n.frame ? '离线 · 缓存' : '离线'} tone={live ? 'ok' : 'warn'} />
             </View>
-            {live && n.frame && (
+            {n.frame ? (
               <>
+                {typeof n.frame.at === 'number' && <Text style={styles.peak}>更新时间 {new Date(n.frame.at * 1000).toLocaleTimeString()}</Text>}
                 <View style={styles.metricRow}>
                   <Text style={styles.metricLabel}>TPS</Text>
                   <Text style={[styles.metricValue, { color: ratio > 0.9 ? colors.ok : colors.warn }]}>
@@ -144,18 +196,21 @@ export function MonitorScreen({ conn, uuid = '' }: MonitorScreenProps): JSX.Elem
                 {n.frame.max != null && (
                   <Text style={styles.peak}>MSPT 峰值 {n.frame.max.toFixed(1)}</Text>
                 )}
-                {(n.frame.dims ?? []).filter((d) => d.players > 0).map((d) => (
+                {(n.frame.dims ?? []).map((d) => (
                   <View key={d.id} style={styles.dimRow}>
-                    <Text style={styles.dimText}>维度 {d.id}</Text>
-                    <Text style={styles.dimMeta}>{d.players} 人 ｜ MSPT {d.mspt.toFixed(2)}</Text>
+                    <Text style={styles.dimText}>{d.name || `维度 ${d.id}`}</Text>
+                    <Text style={styles.dimMeta}>{d.players} 人 ｜ MSPT {typeof d.mspt === 'number' ? d.mspt.toFixed(2) : '—'}</Text>
                   </View>
                 ))}
+                <Trend samples={samples[n.nodeId] ?? []} />
               </>
-            )}
+            ) : <Text style={styles.peak}>暂无节点指标</Text>}
           </Card>
         );
       })}
-
+      </>}
+      {management && <>
+      <PageHeader title="服务器管理" connected={connected} />
       <SectionLabel text="在线榜同步" right={<Chip label="rank.sync" tone="accent2" />} />
       <Card>
         <Text style={styles.hint}>每 UUID 每日一次，需超管/服主权限。</Text>
@@ -164,13 +219,8 @@ export function MonitorScreen({ conn, uuid = '' }: MonitorScreenProps): JSX.Elem
           <PrimaryButton
             label="同步到本服"
             icon="sync"
-            disabled={syncNodeId.trim() === '' || uuid === ''}
-            onPress={() => {
-              setSyncMsg('');
-              void conn.req('rank.sync', { uuid, nodeId: Number(syncNodeId) }).then((res) => {
-                setSyncMsg(res.ok ? '已排队（queued）' : `rank.sync: ${res.m ?? '失败'}`);
-              }).catch((e: any) => setSyncMsg(String(e.message ?? e)));
-            }}
+            disabled={!connected || busy || !/^\d+$/.test(syncNodeId.trim()) || !uuid}
+            onPress={() => void syncRank()}
           />
         </View>
         {syncMsg !== '' && <Text style={styles.okText}>{syncMsg}</Text>}
@@ -182,22 +232,35 @@ export function MonitorScreen({ conn, uuid = '' }: MonitorScreenProps): JSX.Elem
         <StyledInput value={opTarget} onChangeText={setOpTarget} placeholder="目标玩家 UUID" />
         <View style={[styles.row, { marginTop: spacing.s }]}>
           <StyledInput value={opNodeId} onChangeText={setOpNodeId} placeholder="节点 ID" keyboardType="number-pad" style={{ flex: 1 }} />
-          <GhostButton label="授予" icon="shield-checkmark-outline" disabled={opTarget.trim() === '' || opNodeId.trim() === ''} onPress={() => void applyOpSet(true)} />
-          <GhostButton label="撤销" icon="shield-outline" tone="bad" disabled={opTarget.trim() === '' || opNodeId.trim() === ''} onPress={() => void applyOpSet(false)} />
+          <GhostButton label="授予" icon="shield-checkmark-outline" disabled={!connected || busy || opTarget.trim() === '' || !/^\d+$/.test(opNodeId.trim())} onPress={() => void applyOpSet(true)} />
+          <GhostButton label="撤销" icon="shield-outline" tone="bad" disabled={!connected || busy || opTarget.trim() === '' || !/^\d+$/.test(opNodeId.trim())} onPress={() => void applyOpSet(false)} />
         </View>
         {opMsg !== '' && <Text style={styles.okText}>{opMsg}</Text>}
       </Card>
+      </>}
     </ScrollView>
   );
+}
+
+function Trend({ samples }: { samples: Sample[] }): JSX.Element {
+  if (samples.length < 2) return <Text style={styles.peak}>趋势 · 等待更多采样</Text>;
+  const recent = samples.slice(-12);
+  const peak = Math.max(1, ...recent.map(({ mspt }) => mspt));
+  return <View style={{ marginTop: spacing.m }}>
+    <Text style={styles.peak}>最近 {recent.length} 次采样 · TPS / MSPT</Text>
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 36, gap: 3 }}>
+      {recent.map((sample) => <View key={sample.ts} style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', height: 34, gap: 1 }}>
+        <View style={{ flex: 1, height: Math.max(0, Math.min(34, sample.tps / 20 * 34)), backgroundColor: colors.accent }} />
+        <View style={{ flex: 1, height: Math.max(0, sample.mspt / peak * 34), backgroundColor: colors.accent2 }} />
+      </View>)}
+    </View>
+  </View>;
 }
 
 const styles = themedStyles(() => ({
   wrap: { flex: 1, paddingHorizontal: spacing.l, paddingTop: spacing.m },
   headRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { color: colors.text, fontSize: 20, fontWeight: '700' },
   sub: { color: colors.textFaint, fontSize: 12, marginTop: 2 },
-  errBox: { marginTop: spacing.m, padding: spacing.m, borderRadius: radius.s, borderWidth: 1 },
-  errText: { fontSize: 12, lineHeight: 17 },
   nodeHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   nodeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.s },
   nodeName: { color: colors.text, fontSize: 15, fontWeight: '600' },

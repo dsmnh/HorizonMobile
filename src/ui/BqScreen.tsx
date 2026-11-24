@@ -4,7 +4,7 @@
  * 失败不自动重试，需人工重新发起。
  * 视觉对齐 AEMobileApp：警告条 + 表单卡 + 危险动作按钮。
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 import { colors, radius, spacing, themedStyles } from './theme';
 import { Card, Chip, FieldLabel, PrimaryButton, SectionLabel, StyledInput } from './components';
@@ -19,9 +19,12 @@ export function BqScreen({ conn }: BqScreenProps): JSX.Element {
   const [source, setSource] = useState('');
   const [target, setTarget] = useState('');
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [msg, setMsg] = useState('');
 
   const start = async (t: number, s: number, d: number) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setMsg('');
     try {
@@ -32,6 +35,7 @@ export function BqScreen({ conn }: BqScreenProps): JSX.Element {
     } catch (e: any) {
       setMsg(String(e.message ?? e));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -86,6 +90,7 @@ export function BqScreen({ conn }: BqScreenProps): JSX.Element {
         <StyledInput value={target} onChangeText={setTarget} keyboardType="number-pad"
           placeholder="覆盖到这里" editable={!busy} />
 
+        <Text style={styles.note}>来源 {source || "未填写"} → 目标 {target || "未填写"} · 队伍 {teamId || "未填写"}</Text>
         <View style={{ marginTop: spacing.l }}>
           <PrimaryButton label="同步（需二次确认）" icon="swap-horizontal" tone="bad"
             loading={busy} disabled={busy} onPress={confirm} />

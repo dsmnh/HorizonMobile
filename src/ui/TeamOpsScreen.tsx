@@ -4,8 +4,8 @@
  * 需要目标输入的动作在成员与审批屏（TeamRosterScreen）完成，全 15 个队伍 op 已覆盖。
  * 视觉对齐 AEMobileApp：分组卡 + 危险动作独立分组。
  */
-import React, { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import { colors, radius, spacing, themedStyles } from './theme';
 import { Card, Chip, GhostButton, PrimaryButton, SectionLabel, StyledInput } from './components';
 import { HorizonConn, type Res } from '../net/conn';
@@ -19,11 +19,18 @@ export interface TeamOpsScreenProps {
 export function TeamOpsScreen({ conn, uuid, onChanged }: TeamOpsScreenProps): JSX.Element {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const [error, setError] = useState('');
   const [okMsg, setOkMsg] = useState('');
 
   const run = async (op: string, p: Record<string, unknown>, doneText: string) => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError('');
     setOkMsg('');
@@ -31,13 +38,14 @@ export function TeamOpsScreen({ conn, uuid, onChanged }: TeamOpsScreenProps): JS
       const res: Res = await conn.req(op, { uuid, ...p });
       if (res.ok) {
         setOkMsg(doneText);
-        onChanged?.();
+        if (mounted.current) onChanged?.();
       } else {
         setError(`${op}: ${res.m ?? '失败'}`);
       }
     } catch (e: any) {
       setError(e.message ?? String(e));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
@@ -97,9 +105,9 @@ export function TeamOpsScreen({ conn, uuid, onChanged }: TeamOpsScreenProps): JS
         <Text style={styles.hint}>解散会删除中央队伍并向各节点下发清除；队长不可直接退出。</Text>
         <View style={styles.actRow}>
           <GhostButton label="退出队伍" icon="exit-outline" tone="neutral" disabled={busy}
-            onPress={() => void run('team.leave', {}, '已退出')} />
+            onPress={() => Alert.alert('退出队伍', '确认退出当前队伍？', [{ text: '取消', style: 'cancel' }, { text: '退出', style: 'destructive', onPress: () => void run('team.leave', {}, '已退出') }])} />
           <GhostButton label="解散队伍" icon="trash-outline" tone="bad" disabled={busy}
-            onPress={() => void run('team.disband', {}, '已解散')} />
+            onPress={() => Alert.alert('解散队伍', '确认解散当前队伍？此操作不可撤销。', [{ text: '取消', style: 'cancel' }, { text: '解散', style: 'destructive', onPress: () => void run('team.disband', {}, '已解散') }])} />
         </View>
       </Card>
     </ScrollView>

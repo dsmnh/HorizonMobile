@@ -17,7 +17,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { radius, spacing, useTheme } from './theme';
+import { radius, spacing, typography, useTheme } from './theme';
 
 export type Tone = 'neutral' | 'ok' | 'bad' | 'warn' | 'accent' | 'accent2';
 
@@ -40,6 +40,41 @@ export function StatusDot({ ok, size = 8 }: { ok: boolean; size?: number }): JSX
       }}
     />
   );
+}
+
+export function PageHeader({ title, connected, onRefresh, refreshing }: {
+  title: string; connected: boolean; onRefresh?: () => void; refreshing?: boolean;
+}): JSX.Element {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.m, marginBottom: spacing.m }}>
+      <View style={{ flex: 1, gap: spacing.xs }}>
+        <Text accessibilityRole="header" style={[typography.title, { color: colors.text }]}>{title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.s }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: connected ? colors.ok : colors.bad }} />
+          <Text style={[typography.caption, { color: colors.textDim }]}>{connected ? '后端已连接' : '连接中断 · 正在重连'}</Text>
+        </View>
+      </View>
+      {onRefresh && <Pressable accessibilityRole="button" accessibilityLabel="刷新" onPress={onRefresh}
+        disabled={refreshing || !connected} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center',
+          borderRadius: radius.m, borderWidth: StyleSheet.hairlineWidth, backgroundColor: colors.surface, borderColor: colors.border }}>
+        {refreshing ? <ActivityIndicator color={colors.accent} /> : <Ionicons name="refresh" size={21} color={colors.textDim} />}
+      </Pressable>}
+    </View>
+  );
+}
+
+export function StateNotice({ children, tone = 'warn', loading = false }: {
+  children: string; tone?: 'warn' | 'bad' | 'neutral'; loading?: boolean;
+}): JSX.Element {
+  const { colors } = useTheme();
+  const color = tone === 'bad' ? colors.bad : tone === 'warn' ? colors.warn : colors.textDim;
+  const backgroundColor = tone === 'bad' ? colors.badSoft : tone === 'warn' ? colors.warnSoft : colors.surfaceAlt;
+  return <View accessibilityLiveRegion="polite" style={{ flexDirection: 'row', gap: spacing.s, alignItems: 'center',
+    padding: spacing.m, marginVertical: spacing.xs, borderRadius: radius.m, backgroundColor }}>
+    {loading && <ActivityIndicator color={color} size="small" />}
+    <Text style={[typography.caption, { color, flex: 1 }]}>{children}</Text>
+  </View>;
 }
 
 /** 小标签：软底 + 同色文字。 */
@@ -294,7 +329,7 @@ export function SettingsRow({
   );
   if (!onPress) return body;
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}>
+    <Pressable accessibilityRole="button" onPress={onPress} disabled={disabled} style={({ pressed }) => (pressed ? { opacity: 0.7 } : null)}>
       {body}
     </Pressable>
   );
@@ -350,6 +385,7 @@ const cardStyles = StyleSheet.create({
 
 const btnStyles = StyleSheet.create({
   primary: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -360,6 +396,7 @@ const btnStyles = StyleSheet.create({
   },
   primaryText: { fontSize: 15, fontWeight: '700' },
   ghost: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -398,7 +435,7 @@ const emptyStyles = StyleSheet.create({
 const groupStyles = StyleSheet.create({
   title: { fontSize: 11, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: spacing.s, marginTop: spacing.s },
   footnote: { fontSize: 11, lineHeight: 17, marginTop: spacing.s },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.m, paddingVertical: 13, paddingHorizontal: spacing.l },
+  row: { minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: spacing.m, paddingVertical: 10, paddingHorizontal: spacing.l },
   iconBox: { width: 30, height: 30, borderRadius: radius.s, alignItems: 'center', justifyContent: 'center' },
   label: { fontSize: 14, fontWeight: '500' },
   detail: { fontSize: 11, marginTop: 2 },
@@ -407,6 +444,6 @@ const groupStyles = StyleSheet.create({
 
 const segStyles = StyleSheet.create({
   wrap: { flexDirection: 'row', padding: 3, borderRadius: radius.m, borderWidth: 1, gap: 3 },
-  item: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderRadius: radius.s },
+  item: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderRadius: radius.s },
   text: { fontSize: 12, fontWeight: '600' },
 });

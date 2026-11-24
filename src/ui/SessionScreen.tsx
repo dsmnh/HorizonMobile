@@ -4,8 +4,8 @@
  * 撤销当前会话将触发本端断开（后端 runAfterResponse(conn::close)），上层据此回登录屏。
  * 视觉对齐 AEMobileApp：会话卡 + 当前会话状态点。
  */
-import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import { colors, radius, spacing, themedStyles } from './theme';
 import { Card, Chip, EmptyState, GhostButton, StatusDot } from './components';
 import { HorizonConn, type Res } from '../net/conn';
@@ -23,6 +23,8 @@ export interface SessionScreenProps {
 }
 
 export function SessionScreen({ conn, onSelfRevoked }: SessionScreenProps): JSX.Element {
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [error, setError] = useState('');
 
@@ -45,6 +47,9 @@ export function SessionScreen({ conn, onSelfRevoked }: SessionScreenProps): JSX.
   }, [refresh]);
 
   const revoke = async (s: SessionRow) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     setError('');
     try {
       const res: Res = await conn.req('account.revokeSession', { id: s.id });
@@ -60,6 +65,9 @@ export function SessionScreen({ conn, onSelfRevoked }: SessionScreenProps): JSX.
       }
     } catch (e: any) {
       setError(e.message ?? String(e));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   };
 
@@ -94,7 +102,7 @@ export function SessionScreen({ conn, onSelfRevoked }: SessionScreenProps): JSX.
           </View>
           <Text style={styles.seen}>最近活跃 {new Date(s.lastSeen * 1000).toLocaleString()}</Text>
           <View style={styles.actRow}>
-            <GhostButton label="撤销会话" icon="close-circle-outline" tone="bad" onPress={() => void revoke(s)} />
+            <GhostButton label="撤销会话" icon="close-circle-outline" tone="bad" disabled={busy} onPress={() => Alert.alert('撤销会话', `确认撤销 ${s.app || '未知客户端'} 的会话？`, [{ text: '取消', style: 'cancel' }, { text: '撤销', style: 'destructive', onPress: () => void revoke(s) }])} />
           </View>
         </Card>
       ))}

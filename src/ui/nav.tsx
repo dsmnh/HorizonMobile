@@ -4,13 +4,19 @@
  */
 import { createContext, useContext } from 'react';
 import type { HorizonConn, Res } from '../net/conn';
+import type { PlayerIdentity } from '../net/identity';
+import type { NavigatorScreenParams } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 export interface AppState {
   conn: HorizonConn | null;
+  account: string;
+  activeUuid: string;
+  setActiveUuid: (uuid: string) => void;
   connected: boolean;
+  identities: PlayerIdentity[];
+  setIdentities: (identities: PlayerIdentity[]) => void;
   uuids: string[];
-  setUuids: (uuids: string[]) => void;
   authenticate: (
     host: string,
     port: number,
@@ -34,9 +40,13 @@ export interface AppState {
 
 export const AppContext = createContext<AppState>({
   conn: null,
+  account: '',
+  activeUuid: '',
+  setActiveUuid: () => undefined,
   connected: false,
+  identities: [],
+  setIdentities: () => undefined,
   uuids: [],
-  setUuids: () => undefined,
   authenticate: async () => undefined,
   resetPassword: async () => '未连接后端',
   disconnect: () => undefined,
@@ -48,14 +58,23 @@ export function useApp(): AppState {
   return useContext(AppContext);
 }
 
+export type MainTabParamList = {
+  Home: undefined;
+  Storage: undefined;
+  Chat: undefined;
+  Tools: undefined;
+};
+
 export type RootStackParamList = {
   Login: undefined;
-  Home: undefined;
+  Main: NavigatorScreenParams<MainTabParamList> | undefined;
+  Bind: undefined;
   Team: undefined;
-  Chat: undefined;
-  Monitor: undefined;
+  ChatStyle: undefined;
   Session: undefined;
-  Me: undefined;
+  Monitor: undefined;
+  ServerTools: undefined;
+  Profile: undefined;
   Bq: undefined;
   Settings: undefined;
 };

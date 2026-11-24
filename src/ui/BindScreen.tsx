@@ -4,27 +4,34 @@
  * 绑定码 10 分钟有效且一次性、新码注销旧码（企划书 03）。
  * 视觉对齐 AEMobileApp：品牌提示 + 表单卡。
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { colors, radius, spacing, themedStyles } from './theme';
 import { Card, Chip, FieldLabel, PrimaryButton, SectionLabel, StyledInput } from './components';
 import { HorizonConn, type Res } from '../net/conn';
-import { normalizeUuids } from '../net/identity';
+import { normalizeIdentities, type PlayerIdentity } from '../net/identity';
 
 export interface BindScreenProps {
   conn: HorizonConn;
-  onBound: (uuids: string[]) => void;
+  onBound: (identities: PlayerIdentity[], partial: boolean) => void;
 }
 
 export function BindScreen({ conn, onBound }: BindScreenProps): JSX.Element {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
 
   const submit = async () => {
     const c = code.trim();
-    if (!c || busy) return;
+    if (!c || busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError('');
     setOk('');
@@ -33,16 +40,17 @@ export function BindScreen({ conn, onBound }: BindScreenProps): JSX.Element {
       if (res.ok) {
         // bindUUID 只回单个 uuid，列表以 account.uuids 为准（1.6.0 起条目带玩家名）
         const list = await conn.req('account.uuids', {});
-        const uuids = list.ok ? normalizeUuids(list.b?.uuids) : normalizeUuids([res.b?.uuid]);
+        const identities = normalizeIdentities(list.ok ? list.b?.uuids : [res.b?.uuid]);
         setOk('绑定成功');
         setCode('');
-        onBound(uuids);
+        if (mounted.current) onBound(identities, !list.ok);
       } else {
         setError(res.m ?? '绑定失败');
       }
     } catch (e: any) {
       setError(e.message ?? String(e));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
